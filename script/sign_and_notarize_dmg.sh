@@ -54,7 +54,17 @@ AVAILABLE_IDENTITIES="$(/usr/bin/security find-identity -v -p codesigning)"
 
 rm -f "$NOTARY_RESULT" "$CHECKSUM_PATH"
 
-/usr/bin/ditto "$APP_PATH" "$SIGNED_APP"
+# Incoming apps transferred through a browser or chat client can carry Gatekeeper
+# quarantine. Work only on a quarantine-free temporary copy; never mutate the input.
+/usr/bin/ditto --norsrc --noextattr --noqtn --noacl "$APP_PATH" "$SIGNED_APP"
+/usr/bin/xattr -dr com.apple.quarantine "$SIGNED_APP" 2>/dev/null || true
+REMAINING_QUARANTINE="$(
+  /usr/bin/xattr -lr "$SIGNED_APP" 2>/dev/null \
+    | /usr/bin/grep -F 'com.apple.quarantine:' \
+    || true
+)"
+[[ -z "$REMAINING_QUARANTINE" ]] \
+  || fail "download quarantine could not be removed from the temporary app copy"
 [[ -x "$HOOK_BRIDGE" ]] || fail "the embedded CodexDoneHookBridge is missing"
 
 # Sign the nested executable first, then seal the outer app bundle.
@@ -72,6 +82,8 @@ rm -f "$NOTARY_RESULT" "$CHECKSUM_PATH"
   --sign "$SIGNING_IDENTITY" \
   "$SIGNED_APP"
 
+# Pre-notarization verification is deliberately static. Launching a transferred
+# app or helper here would invoke Gatekeeper before Apple can notarize the DMG.
 "$VERIFY_APP_SCRIPT" --expected-team "$TEAM_ID" "$SIGNED_APP"
 "$CREATE_DMG_SCRIPT" "$SIGNED_APP" "$OUTPUT_DMG" "$VOLUME_NAME"
 

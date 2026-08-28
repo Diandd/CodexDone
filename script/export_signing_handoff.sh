@@ -37,6 +37,7 @@ TOOLS=(
 mkdir -p "$KIT_DIR/script" "$(dirname "$OUTPUT_ZIP")"
 README_LINES=(
   "CodexDone signing and notarization handoff"
+  "Handoff revision: 2 (quarantine-safe static pre-notarization verification)"
   ""
   "Requirements:"
   "- Developer ID Application certificate in the signing Mac keychain"
@@ -51,6 +52,8 @@ README_LINES=(
   ""
   "The command signs the embedded HookBridge first, signs the app and DMG, submits the DMG"
   "for notarization, staples the accepted ticket, validates Gatekeeper, and writes a SHA-256 file."
+  "It removes transfer quarantine only from a temporary copy and does not launch the incoming app"
+  "or HookBridge before notarization. The received app remains unchanged."
   "Signing certificates, Apple credentials, and notary profiles must remain on the signing Mac."
 )
 printf '%s\n' "${README_LINES[@]}" > "$KIT_DIR/README.txt"

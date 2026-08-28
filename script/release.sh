@@ -70,7 +70,7 @@ xcodebuild -exportArchive -archivePath "$ARCHIVE_PATH" \
   -exportPath "$EXPORT_PATH" -exportOptionsPlist "$EXPORT_OPTIONS"
 
 APP_PATH="$EXPORT_PATH/$APP_NAME.app"
-"$VERIFY_SCRIPT" --expected-team "$TEAM_ID" "$APP_PATH"
+"$VERIFY_SCRIPT" --run-hook-health-check --expected-team "$TEAM_ID" "$APP_PATH"
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Contents/Info.plist")"
 BUILD="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_PATH/Contents/Info.plist")"
 STEM="$APP_NAME-$VERSION-$BUILD-macOS"

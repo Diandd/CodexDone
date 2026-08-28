@@ -24,7 +24,7 @@ fi
   build
 
 APP_PATH="$DERIVED_DATA/Build/Products/Release/$APP_NAME.app"
-"$VERIFY_SCRIPT" "$APP_PATH"
+"$VERIFY_SCRIPT" --run-hook-health-check "$APP_PATH"
 
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Contents/Info.plist")"
 BUILD="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_PATH/Contents/Info.plist")"

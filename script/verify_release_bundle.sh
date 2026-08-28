@@ -5,6 +5,7 @@ APP_NAME="CodexDone"
 EXPECTED_BUNDLE_ID="com.dianstudios.codexdone"
 EXPECTED_TEAM_ID=""
 REQUIRE_NOTARIZED=0
+RUN_HOOK_HEALTH_CHECK=0
 
 fail() {
   printf 'release verification failed: %s\n' "$1" >&2
@@ -12,7 +13,7 @@ fail() {
 }
 
 usage() {
-  printf 'usage: %s [--require-notarized] [--expected-team TEAMID] /absolute/path/to/CodexDone.app\n' "$0" >&2
+  printf 'usage: %s [--require-notarized] [--run-hook-health-check] [--expected-team TEAMID] /absolute/path/to/CodexDone.app\n' "$0" >&2
   exit 2
 }
 
@@ -20,6 +21,10 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --require-notarized)
       REQUIRE_NOTARIZED=1
+      shift
+      ;;
+    --run-hook-health-check)
+      RUN_HOOK_HEALTH_CHECK=1
       shift
       ;;
     --expected-team)
@@ -64,8 +69,11 @@ if find "$APP_PATH/Contents" -path '*/.codexdone-archive/*' -print -quit | grep 
   fail "the local legacy archive leaked into the release bundle"
 fi
 
-"$HOOK_BRIDGE" --health-check || fail "the embedded Hook Bridge health check failed"
 /usr/bin/codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+
+if [[ "$RUN_HOOK_HEALTH_CHECK" -eq 1 ]]; then
+  "$HOOK_BRIDGE" --health-check || fail "the embedded Hook Bridge health check failed"
+fi
 
 SCAN_DIR="$(mktemp -d /tmp/codexdone-release-scan.XXXXXX)"
 cleanup() {
@@ -107,4 +115,8 @@ if [[ "$REQUIRE_NOTARIZED" -eq 1 ]]; then
   /usr/sbin/spctl --assess --type execute --verbose=2 "$APP_PATH"
 fi
 
-printf 'Release bundle structure, Hook Bridge, privacy boundaries, and signatures passed.\n'
+if [[ "$RUN_HOOK_HEALTH_CHECK" -eq 1 ]]; then
+  printf 'Release bundle structure, Hook Bridge runtime health, privacy boundaries, and signatures passed.\n'
+else
+  printf 'Release bundle structure, embedded Hook Bridge, privacy boundaries, and signatures passed without launching the app or helper.\n'
+fi
