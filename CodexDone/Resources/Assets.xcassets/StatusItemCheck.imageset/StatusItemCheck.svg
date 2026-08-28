@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <path
+    d="M 392 500 L 478 586 L 642 422"
+    fill="none"
+    stroke="#000000"
+    stroke-width="78"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    transform="translate(512 512) rotate(7) scale(1.32) translate(-512 -512)"
+  />
+</svg>

@@ -1,0 +1,31 @@
+# Xcode
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xccheckout
+*.xcscmblueprint
+
+# Swift Package Manager and local build output
+.build/
+dist/
+artifacts/build/
+artifacts/release/
+artifacts/review/
+
+# UI verification output is local evidence unless explicitly selected
+artifacts/ui-tests/**/*.png
+artifacts/ui-tests/**/*.jpg
+
+# macOS
+.DS_Store
+
+# Local diagnostics
+*.log
+/diagnostics/
+
+# Local Codex workspace runtime
+/.codex/environments/
+
+# Python fixture caches
+__pycache__/
+*.pyc

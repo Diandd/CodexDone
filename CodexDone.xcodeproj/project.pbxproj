@@ -1,0 +1,212 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A00100000000000000000001 /* CodexDoneApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00100000000000000000001 /* CodexDoneApp.swift */; };
+		A00100000000000000000002 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00100000000000000000002 /* AppDelegate.swift */; };
+		A00100000000000000000003 /* AppEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00100000000000000000003 /* AppEnvironment.swift */; };
+		A00100000000000000000004 /* StatusItemController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00100000000000000000004 /* StatusItemController.swift */; };
+		A00100000000000000000005 /* DesktopCompletionHookEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00100000000000000000005 /* DesktopCompletionHookEvent.swift */; };
+		A00100000000000000000006 /* HookPayloadSanitizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00100000000000000000006 /* HookPayloadSanitizer.swift */; };
+		A00100000000000000000007 /* HookRuntimePaths.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00100000000000000000007 /* HookRuntimePaths.swift */; };
+		A00100000000000000000008 /* DesktopCompletionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00100000000000000000008 /* DesktopCompletionModels.swift */; };
+		A00100000000000000000009 /* CompletionReducer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00100000000000000000009 /* CompletionReducer.swift */; };
+		A0010000000000000000000A /* CompletionPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0010000000000000000000A /* CompletionPersistence.swift */; };
+		A0010000000000000000000B /* DesktopCompletionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0010000000000000000000B /* DesktopCompletionStore.swift */; };
+		A0010000000000000000000C /* HookInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0010000000000000000000C /* HookInstaller.swift */; };
+		A0010000000000000000000D /* HookSocketServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0010000000000000000000D /* HookSocketServer.swift */; };
+		A0010000000000000000000E /* HookSpoolConsumer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0010000000000000000000E /* HookSpoolConsumer.swift */; };
+		A0010000000000000000000F /* CompletionAlertCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0010000000000000000000F /* CompletionAlertCoordinator.swift */; };
+		A00100000000000000000010 /* CompletionSoundService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00100000000000000000010 /* CompletionSoundService.swift */; };
+		A00100000000000000000011 /* SystemNotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00100000000000000000011 /* SystemNotificationService.swift */; };
+		A00100000000000000000012 /* SystemIntegrationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00100000000000000000012 /* SystemIntegrationService.swift */; };
+		A00100000000000000000013 /* MenuBarContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00100000000000000000013 /* MenuBarContentView.swift */; };
+		A00100000000000000000014 /* SettingsRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00100000000000000000014 /* SettingsRootView.swift */; };
+		A0010000000000000000001B /* HookEnablementGuideView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0010000000000000000001B /* HookEnablementGuideView.swift */; };
+		A0010000000000000000001C /* CodexHookStatusService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0010000000000000000001C /* CodexHookStatusService.swift */; };
+		A00100000000000000000015 /* CompletionOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00100000000000000000015 /* CompletionOverlayView.swift */; };
+		A00100000000000000000016 /* OverlayWindowCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00100000000000000000016 /* OverlayWindowCoordinator.swift */; };
+		A00100000000000000000017 /* CompletionHUDView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00100000000000000000017 /* CompletionHUDView.swift */; };
+		A00100000000000000000018 /* HUDWindowCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00100000000000000000018 /* HUDWindowCoordinator.swift */; };
+		A00100000000000000000019 /* ProductConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00100000000000000000019 /* ProductConfiguration.swift */; };
+		A0010000000000000000001A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B0010000000000000000001A /* Assets.xcassets */; };
+		A0010000000000000000001D /* Localization.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0010000000000000000001D /* Localization.swift */; };
+		A0010000000000000000001E /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = B00100000000000000000020 /* Localizable.strings */; };
+		A0010000000000000000001F /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = B00100000000000000000021 /* AppIcon.icon */; };
+		A00100000000000000000022 /* InitializationGuideView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00100000000000000000022 /* InitializationGuideView.swift */; };
+		A00100000000000000000023 /* AlertAppearanceConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00100000000000000000023 /* AlertAppearanceConfiguration.swift */; };
+		A00100000000000000000024 /* GitHubReleaseUpdateService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00100000000000000000024 /* GitHubReleaseUpdateService.swift */; };
+		A00100000000000000000025 /* AlertDisplayStrategy.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00100000000000000000025 /* AlertDisplayStrategy.swift */; };
+		A00100000000000000000026 /* NotchAlertView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00100000000000000000026 /* NotchAlertView.swift */; };
+
+		A00200000000000000000001 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00200000000000000000001 /* main.swift */; };
+		A00200000000000000000002 /* HookBridgeTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00200000000000000000002 /* HookBridgeTransport.swift */; };
+		A00200000000000000000003 /* DesktopCompletionHookEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00100000000000000000005 /* DesktopCompletionHookEvent.swift */; };
+		A00200000000000000000004 /* HookPayloadSanitizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00100000000000000000006 /* HookPayloadSanitizer.swift */; };
+		A00200000000000000000005 /* HookRuntimePaths.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00100000000000000000007 /* HookRuntimePaths.swift */; };
+		A00200000000000000000006 /* CodexDoneHookBridge in Embed HookBridge */ = {isa = PBXBuildFile; fileRef = B00900000000000000000002 /* CodexDoneHookBridge */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+
+		A00300000000000000000001 /* CompletionReducerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00300000000000000000001 /* CompletionReducerTests.swift */; };
+		A00300000000000000000002 /* DesktopCompletionStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00300000000000000000002 /* DesktopCompletionStoreTests.swift */; };
+		A00300000000000000000003 /* CompletionPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00300000000000000000003 /* CompletionPersistenceTests.swift */; };
+		A00300000000000000000004 /* HookPayloadSanitizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00300000000000000000004 /* HookPayloadSanitizerTests.swift */; };
+		A00300000000000000000005 /* HookInstallerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00300000000000000000005 /* HookInstallerTests.swift */; };
+		A00300000000000000000006 /* HookBridgeProcessTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00300000000000000000006 /* HookBridgeProcessTests.swift */; };
+		A00300000000000000000007 /* HookSpoolConsumerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00300000000000000000007 /* HookSpoolConsumerTests.swift */; };
+		A00300000000000000000008 /* test-tone.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = B00300000000000000000008 /* test-tone.mp3 */; };
+		A00300000000000000000009 /* OverlayWindowCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00300000000000000000009 /* OverlayWindowCoordinatorTests.swift */; };
+		A0030000000000000000000A /* CodexHookStatusServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0030000000000000000000A /* CodexHookStatusServiceTests.swift */; };
+		A0030000000000000000000B /* LocalizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0030000000000000000000B /* LocalizationTests.swift */; };
+		A00400000000000000000001 /* CodexDoneUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00400000000000000000001 /* CodexDoneUITests.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		P00100000000000000000001 = {isa = PBXContainerItemProxy; containerPortal = F00000000000000000000001 /* Project object */; proxyType = 1; remoteGlobalIDString = E00200000000000000000001; remoteInfo = CodexDoneHookBridge; };
+		P00100000000000000000002 = {isa = PBXContainerItemProxy; containerPortal = F00000000000000000000001 /* Project object */; proxyType = 1; remoteGlobalIDString = E00100000000000000000001; remoteInfo = CodexDone; };
+		P00100000000000000000003 = {isa = PBXContainerItemProxy; containerPortal = F00000000000000000000001 /* Project object */; proxyType = 1; remoteGlobalIDString = E00100000000000000000001; remoteInfo = CodexDone; };
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		B00100000000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/CodexDoneApp.swift; sourceTree = "<group>"; };
+		B00100000000000000000002 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/AppDelegate.swift; sourceTree = "<group>"; };
+		B00100000000000000000003 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/AppEnvironment.swift; sourceTree = "<group>"; };
+		B00100000000000000000004 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/StatusItemController.swift; sourceTree = "<group>"; };
+		B00100000000000000000005 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/DesktopCompletionHookEvent.swift; sourceTree = "<group>"; };
+		B00100000000000000000006 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/HookPayloadSanitizer.swift; sourceTree = "<group>"; };
+		B00100000000000000000007 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/HookRuntimePaths.swift; sourceTree = "<group>"; };
+		B00100000000000000000008 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models/DesktopCompletion/DesktopCompletionModels.swift; sourceTree = "<group>"; };
+		B00100000000000000000009 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stores/DesktopCompletion/CompletionReducer.swift; sourceTree = "<group>"; };
+		B0010000000000000000000A = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stores/DesktopCompletion/CompletionPersistence.swift; sourceTree = "<group>"; };
+		B0010000000000000000000B = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stores/DesktopCompletion/DesktopCompletionStore.swift; sourceTree = "<group>"; };
+		B0010000000000000000000C = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/Hooks/HookInstaller.swift; sourceTree = "<group>"; };
+		B0010000000000000000000D = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/IPC/HookSocketServer.swift; sourceTree = "<group>"; };
+		B0010000000000000000000E = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/IPC/HookSpoolConsumer.swift; sourceTree = "<group>"; };
+		B0010000000000000000000F = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/Alerts/CompletionAlertCoordinator.swift; sourceTree = "<group>"; };
+		B00100000000000000000010 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/Audio/CompletionSoundService.swift; sourceTree = "<group>"; };
+		B00100000000000000000011 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/Notifications/SystemNotificationService.swift; sourceTree = "<group>"; };
+		B00100000000000000000012 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/System/SystemIntegrationService.swift; sourceTree = "<group>"; };
+		B00100000000000000000013 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Views/MenuBar/MenuBarContentView.swift; sourceTree = "<group>"; };
+		B00100000000000000000014 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Views/Settings/SettingsRootView.swift; sourceTree = "<group>"; };
+		B0010000000000000000001B = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Views/Settings/HookEnablementGuideView.swift; sourceTree = "<group>"; };
+		B0010000000000000000001C = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/Hooks/CodexHookStatusService.swift; sourceTree = "<group>"; };
+		B00100000000000000000015 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Views/Overlay/CompletionOverlayView.swift; sourceTree = "<group>"; };
+		B00100000000000000000016 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Views/Overlay/OverlayWindowCoordinator.swift; sourceTree = "<group>"; };
+		B00100000000000000000017 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Views/HUD/CompletionHUDView.swift; sourceTree = "<group>"; };
+		B00100000000000000000018 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Views/HUD/HUDWindowCoordinator.swift; sourceTree = "<group>"; };
+		B00100000000000000000019 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Support/ProductConfiguration.swift; sourceTree = "<group>"; };
+		B0010000000000000000001A = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Resources/Assets.xcassets; sourceTree = "<group>"; };
+		B0010000000000000000001D = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Support/Localization.swift; sourceTree = "<group>"; };
+		B0010000000000000000001E = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = Resources/en.lproj/Localizable.strings; sourceTree = "<group>"; };
+		B0010000000000000000001F = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "Resources/zh-Hans.lproj/Localizable.strings"; sourceTree = "<group>"; };
+		B00100000000000000000021 /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = Resources/AppIcon.icon; sourceTree = "<group>"; };
+		B00100000000000000000022 /* InitializationGuideView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Views/Settings/InitializationGuideView.swift; sourceTree = "<group>"; };
+		B00100000000000000000023 /* AlertAppearanceConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/Alerts/AlertAppearanceConfiguration.swift; sourceTree = "<group>"; };
+		B00100000000000000000024 /* GitHubReleaseUpdateService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/Updates/GitHubReleaseUpdateService.swift; sourceTree = "<group>"; };
+		B00100000000000000000025 /* AlertDisplayStrategy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/Alerts/AlertDisplayStrategy.swift; sourceTree = "<group>"; };
+		B00100000000000000000026 /* NotchAlertView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Views/Notch/NotchAlertView.swift; sourceTree = "<group>"; };
+		B00200000000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		B00200000000000000000002 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HookBridgeTransport.swift; sourceTree = "<group>"; };
+		B00300000000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompletionReducerTests.swift; sourceTree = "<group>"; };
+		B00300000000000000000002 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopCompletionStoreTests.swift; sourceTree = "<group>"; };
+		B00300000000000000000003 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompletionPersistenceTests.swift; sourceTree = "<group>"; };
+		B00300000000000000000004 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HookPayloadSanitizerTests.swift; sourceTree = "<group>"; };
+		B00300000000000000000005 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HookInstallerTests.swift; sourceTree = "<group>"; };
+		B00300000000000000000006 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HookBridgeProcessTests.swift; sourceTree = "<group>"; };
+		B00300000000000000000007 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HookSpoolConsumerTests.swift; sourceTree = "<group>"; };
+		B00300000000000000000008 = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = Fixtures/test-tone.mp3; sourceTree = "<group>"; };
+		B00300000000000000000009 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverlayWindowCoordinatorTests.swift; sourceTree = "<group>"; };
+		B0030000000000000000000A = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexHookStatusServiceTests.swift; sourceTree = "<group>"; };
+		B0030000000000000000000B = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalizationTests.swift; sourceTree = "<group>"; };
+		B00400000000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexDoneUITests.swift; sourceTree = "<group>"; };
+		B00900000000000000000001 = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CodexDone.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B00900000000000000000002 = {isa = PBXFileReference; explicitFileType = compiled.mach-o.executable; includeInIndex = 0; path = CodexDoneHookBridge; sourceTree = BUILT_PRODUCTS_DIR; };
+		B00900000000000000000003 = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CodexDoneTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		B00900000000000000000004 = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CodexDoneUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		D00100000000000000000002 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		D00200000000000000000002 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		D00300000000000000000002 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		D00400000000000000000002 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		C00000000000000000000000 = {isa = PBXGroup; children = (C00100000000000000000000 /* CodexDone */, C00200000000000000000000 /* CodexDoneHookBridge */, C00300000000000000000000 /* CodexDoneTests */, C00400000000000000000000 /* CodexDoneUITests */, C00900000000000000000000 /* Products */); sourceTree = "<group>"; };
+		C00100000000000000000000 = {isa = PBXGroup; path = CodexDone; sourceTree = "<group>"; children = (B00100000000000000000001, B00100000000000000000002, B00100000000000000000003, B00100000000000000000004, B00100000000000000000005, B00100000000000000000006, B00100000000000000000007, B00100000000000000000008, B00100000000000000000009, B0010000000000000000000A, B0010000000000000000000B, B0010000000000000000000C, B0010000000000000000001C, B0010000000000000000000D, B0010000000000000000000E, B0010000000000000000000F, B00100000000000000000023, B00100000000000000000025, B00100000000000000000010, B00100000000000000000011, B00100000000000000000012, B00100000000000000000024, B00100000000000000000013, B00100000000000000000014, B0010000000000000000001B, B00100000000000000000022, B00100000000000000000015, B00100000000000000000016, B00100000000000000000017, B00100000000000000000018, B00100000000000000000026, B00100000000000000000019, B0010000000000000000001D, B00100000000000000000020, B0010000000000000000001A, B00100000000000000000021); };
+		C00200000000000000000000 = {isa = PBXGroup; path = CodexDoneHookBridge; sourceTree = "<group>"; children = (B00200000000000000000001, B00200000000000000000002); };
+		C00300000000000000000000 = {isa = PBXGroup; path = CodexDoneTests; sourceTree = "<group>"; children = (B00300000000000000000001, B00300000000000000000002, B00300000000000000000003, B00300000000000000000004, B00300000000000000000005, B00300000000000000000006, B00300000000000000000007, B00300000000000000000008, B00300000000000000000009, B0030000000000000000000A, B0030000000000000000000B); };
+		C00400000000000000000000 = {isa = PBXGroup; path = CodexDoneUITests; sourceTree = "<group>"; children = (B00400000000000000000001); };
+		C00900000000000000000000 = {isa = PBXGroup; name = Products; sourceTree = "<group>"; children = (B00900000000000000000001, B00900000000000000000002, B00900000000000000000003, B00900000000000000000004); };
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		E00100000000000000000001 = {isa = PBXNativeTarget; buildConfigurationList = H00100000000000000000001; buildPhases = (D00100000000000000000001, D00100000000000000000002, D00100000000000000000003, D00100000000000000000004); buildRules = (); dependencies = (Q00100000000000000000001); name = CodexDone; productName = CodexDone; productReference = B00900000000000000000001; productType = "com.apple.product-type.application"; };
+		E00200000000000000000001 = {isa = PBXNativeTarget; buildConfigurationList = H00200000000000000000001; buildPhases = (D00200000000000000000001, D00200000000000000000002, D00200000000000000000003); buildRules = (); dependencies = (); name = CodexDoneHookBridge; productName = CodexDoneHookBridge; productReference = B00900000000000000000002; productType = "com.apple.product-type.tool"; };
+		E00300000000000000000001 = {isa = PBXNativeTarget; buildConfigurationList = H00300000000000000000001; buildPhases = (D00300000000000000000001, D00300000000000000000002, D00300000000000000000003); buildRules = (); dependencies = (Q00100000000000000000002); name = CodexDoneTests; productName = CodexDoneTests; productReference = B00900000000000000000003; productType = "com.apple.product-type.bundle.unit-test"; };
+		E00400000000000000000001 = {isa = PBXNativeTarget; buildConfigurationList = H00400000000000000000001; buildPhases = (D00400000000000000000001, D00400000000000000000002, D00400000000000000000003); buildRules = (); dependencies = (Q00100000000000000000003); name = CodexDoneUITests; productName = CodexDoneUITests; productReference = B00900000000000000000004; productType = "com.apple.product-type.bundle.ui-testing"; };
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		F00000000000000000000001 = {isa = PBXProject; attributes = {BuildIndependentTargetsInParallel = YES; LastSwiftUpdateCheck = 2700; LastUpgradeCheck = 2700; TargetAttributes = {E00100000000000000000001 = {CreatedOnToolsVersion = 27.0; }; E00200000000000000000001 = {CreatedOnToolsVersion = 27.0; }; E00300000000000000000001 = {CreatedOnToolsVersion = 27.0; TestTargetID = E00100000000000000000001; }; E00400000000000000000001 = {CreatedOnToolsVersion = 27.0; TestTargetID = E00100000000000000000001; }; }; }; buildConfigurationList = H00000000000000000000001; compatibilityVersion = "Xcode 14.0"; developmentRegion = zh-Hans; hasScannedForEncodings = 0; knownRegions = (zh-Hans, en, Base); mainGroup = C00000000000000000000000; productRefGroup = C00900000000000000000000; projectDirPath = ""; projectRoot = ""; targets = (E00100000000000000000001, E00200000000000000000001, E00300000000000000000001, E00400000000000000000001); };
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		D00100000000000000000003 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (A0010000000000000000001A, A0010000000000000000001E, A0010000000000000000001F); runOnlyForDeploymentPostprocessing = 0; };
+		D00200000000000000000003 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		D00300000000000000000003 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (A00300000000000000000008); runOnlyForDeploymentPostprocessing = 0; };
+		D00400000000000000000003 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		D00100000000000000000004 = {isa = PBXCopyFilesBuildPhase; buildActionMask = 2147483647; dstPath = Contents/Helpers; dstSubfolderSpec = 1; files = (A00200000000000000000006); name = "Embed HookBridge"; runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		D00100000000000000000001 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A00100000000000000000001, A00100000000000000000002, A00100000000000000000003, A00100000000000000000004, A00100000000000000000005, A00100000000000000000006, A00100000000000000000007, A00100000000000000000008, A00100000000000000000009, A0010000000000000000000A, A0010000000000000000000B, A0010000000000000000000C, A0010000000000000000001C, A0010000000000000000000D, A0010000000000000000000E, A0010000000000000000000F, A00100000000000000000023, A00100000000000000000025, A00100000000000000000010, A00100000000000000000011, A00100000000000000000012, A00100000000000000000024, A00100000000000000000013, A00100000000000000000014, A0010000000000000000001B, A00100000000000000000022, A00100000000000000000015, A00100000000000000000016, A00100000000000000000017, A00100000000000000000018, A00100000000000000000026, A00100000000000000000019, A0010000000000000000001D); runOnlyForDeploymentPostprocessing = 0; };
+		D00200000000000000000001 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A00200000000000000000001, A00200000000000000000002, A00200000000000000000003, A00200000000000000000004, A00200000000000000000005); runOnlyForDeploymentPostprocessing = 0; };
+		D00300000000000000000001 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A00300000000000000000001, A00300000000000000000002, A00300000000000000000003, A00300000000000000000004, A00300000000000000000005, A00300000000000000000006, A00300000000000000000007, A00300000000000000000009, A0030000000000000000000A, A0030000000000000000000B); runOnlyForDeploymentPostprocessing = 0; };
+		D00400000000000000000001 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A00400000000000000000001); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		Q00100000000000000000001 = {isa = PBXTargetDependency; target = E00200000000000000000001; targetProxy = P00100000000000000000001; };
+		Q00100000000000000000002 = {isa = PBXTargetDependency; target = E00100000000000000000001; targetProxy = P00100000000000000000002; };
+		Q00100000000000000000003 = {isa = PBXTargetDependency; target = E00100000000000000000001; targetProxy = P00100000000000000000003; };
+/* End PBXTargetDependency section */
+
+/* Begin PBXVariantGroup section */
+		B00100000000000000000020 /* Localizable.strings */ = {isa = PBXVariantGroup; children = (B0010000000000000000001E /* en */, B0010000000000000000001F /* zh-Hans */); name = Localizable.strings; sourceTree = "<group>"; };
+/* End PBXVariantGroup section */
+
+/* Begin XCBuildConfiguration section */
+		G00000000000000000000001 = {isa = XCBuildConfiguration; buildSettings = {ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; CLANG_ENABLE_OBJC_ARC = YES; COPY_PHASE_STRIP = NO; DEBUG_INFORMATION_FORMAT = dwarf; ENABLE_TESTABILITY = YES; GCC_C_LANGUAGE_STANDARD = gnu17; GCC_OPTIMIZATION_LEVEL = 0; GCC_PREPROCESSOR_DEFINITIONS = ("DEBUG=1", "$(inherited)"); MACOSX_DEPLOYMENT_TARGET = 27.0; ONLY_ACTIVE_ARCH = YES; SDKROOT = macosx; SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)"; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; }; name = Debug; };
+		G00000000000000000000002 = {isa = XCBuildConfiguration; buildSettings = {ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; CLANG_ENABLE_OBJC_ARC = YES; COPY_PHASE_STRIP = NO; DEAD_CODE_STRIPPING = YES; DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym"; GCC_C_LANGUAGE_STANDARD = gnu17; MACOSX_DEPLOYMENT_TARGET = 27.0; SDKROOT = macosx; STRIP_INSTALLED_PRODUCT = YES; SWIFT_COMPILATION_MODE = wholemodule; }; name = Release; };
+
+		G00100000000000000000001 = {isa = XCBuildConfiguration; buildSettings = {ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; CODE_SIGN_STYLE = Automatic; COMBINE_HIDPI_IMAGES = YES; CURRENT_PROJECT_VERSION = 3; ENABLE_APP_SANDBOX = NO; ENABLE_HARDENED_RUNTIME = YES; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_KEY_CFBundleDisplayName = CodexDone; INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools"; INFOPLIST_KEY_LSMultipleInstancesProhibited = YES; INFOPLIST_KEY_LSUIElement = YES; MACOSX_DEPLOYMENT_TARGET = 27.0; MARKETING_VERSION = 0.2.0; PRODUCT_BUNDLE_IDENTIFIER = com.dianstudios.codexdone; PRODUCT_NAME = "$(TARGET_NAME)"; SUPPORTED_PLATFORMS = macosx; SWIFT_EMIT_LOC_STRINGS = YES; SWIFT_STRICT_CONCURRENCY = complete; SWIFT_VERSION = 6.0; }; name = Debug; };
+		G00100000000000000000002 = {isa = XCBuildConfiguration; buildSettings = {ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO; CODE_SIGN_STYLE = Automatic; COMBINE_HIDPI_IMAGES = YES; CURRENT_PROJECT_VERSION = 3; ENABLE_APP_SANDBOX = NO; ENABLE_HARDENED_RUNTIME = YES; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_KEY_CFBundleDisplayName = CodexDone; INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools"; INFOPLIST_KEY_LSMultipleInstancesProhibited = YES; INFOPLIST_KEY_LSUIElement = YES; MACOSX_DEPLOYMENT_TARGET = 27.0; MARKETING_VERSION = 0.2.0; PRODUCT_BUNDLE_IDENTIFIER = com.dianstudios.codexdone; PRODUCT_NAME = "$(TARGET_NAME)"; SUPPORTED_PLATFORMS = macosx; SWIFT_EMIT_LOC_STRINGS = YES; SWIFT_STRICT_CONCURRENCY = complete; SWIFT_VERSION = 6.0; }; name = Release; };
+
+		G00200000000000000000001 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 3; ENABLE_HARDENED_RUNTIME = YES; GENERATE_INFOPLIST_FILE = YES; MACOSX_DEPLOYMENT_TARGET = 27.0; MARKETING_VERSION = 0.2.0; PRODUCT_BUNDLE_IDENTIFIER = com.dianstudios.codexdone.hookbridge; PRODUCT_NAME = "$(TARGET_NAME)"; SKIP_INSTALL = YES; SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG; SWIFT_STRICT_CONCURRENCY = complete; SWIFT_VERSION = 6.0; }; name = Debug; };
+		G00200000000000000000002 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 3; ENABLE_HARDENED_RUNTIME = YES; GENERATE_INFOPLIST_FILE = YES; MACOSX_DEPLOYMENT_TARGET = 27.0; MARKETING_VERSION = 0.2.0; PRODUCT_BUNDLE_IDENTIFIER = com.dianstudios.codexdone.hookbridge; PRODUCT_NAME = "$(TARGET_NAME)"; SKIP_INSTALL = YES; SWIFT_STRICT_CONCURRENCY = complete; SWIFT_VERSION = 6.0; }; name = Release; };
+
+		G00300000000000000000001 = {isa = XCBuildConfiguration; buildSettings = {BUNDLE_LOADER = "$(TEST_HOST)"; CODE_SIGN_STYLE = Automatic; GENERATE_INFOPLIST_FILE = YES; MACOSX_DEPLOYMENT_TARGET = 27.0; PRODUCT_BUNDLE_IDENTIFIER = com.dianstudios.codexdone.tests; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_STRICT_CONCURRENCY = complete; SWIFT_VERSION = 6.0; TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CodexDone.app/Contents/MacOS/CodexDone"; }; name = Debug; };
+		G00300000000000000000002 = {isa = XCBuildConfiguration; buildSettings = {BUNDLE_LOADER = "$(TEST_HOST)"; CODE_SIGN_STYLE = Automatic; GENERATE_INFOPLIST_FILE = YES; MACOSX_DEPLOYMENT_TARGET = 27.0; PRODUCT_BUNDLE_IDENTIFIER = com.dianstudios.codexdone.tests; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_STRICT_CONCURRENCY = complete; SWIFT_VERSION = 6.0; TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CodexDone.app/Contents/MacOS/CodexDone"; }; name = Release; };
+
+		G00400000000000000000001 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_STYLE = Automatic; GENERATE_INFOPLIST_FILE = YES; MACOSX_DEPLOYMENT_TARGET = 27.0; PRODUCT_BUNDLE_IDENTIFIER = com.dianstudios.codexdone.uitests; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_STRICT_CONCURRENCY = complete; SWIFT_VERSION = 6.0; TEST_TARGET_NAME = CodexDone; }; name = Debug; };
+		G00400000000000000000002 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_STYLE = Automatic; GENERATE_INFOPLIST_FILE = YES; MACOSX_DEPLOYMENT_TARGET = 27.0; PRODUCT_BUNDLE_IDENTIFIER = com.dianstudios.codexdone.uitests; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_STRICT_CONCURRENCY = complete; SWIFT_VERSION = 6.0; TEST_TARGET_NAME = CodexDone; }; name = Release; };
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		H00000000000000000000001 = {isa = XCConfigurationList; buildConfigurations = (G00000000000000000000001, G00000000000000000000002); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		H00100000000000000000001 = {isa = XCConfigurationList; buildConfigurations = (G00100000000000000000001, G00100000000000000000002); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		H00200000000000000000001 = {isa = XCConfigurationList; buildConfigurations = (G00200000000000000000001, G00200000000000000000002); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		H00300000000000000000001 = {isa = XCConfigurationList; buildConfigurations = (G00300000000000000000001, G00300000000000000000002); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		H00400000000000000000001 = {isa = XCConfigurationList; buildConfigurations = (G00400000000000000000001, G00400000000000000000002); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+/* End XCConfigurationList section */
+	};
+	rootObject = F00000000000000000000001 /* Project object */;
+}
