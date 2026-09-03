@@ -29,7 +29,7 @@ actor HookSpoolConsumer {
       guard
         let data = try? Data(contentsOf: file),
         let event = try? decoder.decode(DesktopCompletionHookEvent.self, from: data),
-        event.version == DesktopCompletionHookEvent.schemaVersion
+        DesktopCompletionHookEvent.supportsSchemaVersion(event.version)
       else {
         try? fileManager.removeItem(at: file)
         continue

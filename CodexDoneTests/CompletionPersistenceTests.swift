@@ -213,7 +213,72 @@ struct CompletionPersistenceTests {
     #expect(!fileText.contains("运行时只保留"))
   }
 
-  @Test("开发期状态版本不匹配时直接清空且不迁移")
+  @Test("从已发布 0.2 的 v5 状态迁移并保留待查看记录")
+  func migratesReleasedV020State() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    let stateURL = root.appendingPathComponent("state.json")
+    let processedEventID = UUID()
+    let diagnosticID = UUID()
+    let releasedState: [String: Any] = [
+      "version": 5,
+      "sessions": [[
+        "sessionID": "released-session",
+        "phase": "readyToReview",
+        "turnID": "released-turn",
+        "projectDisplayName": "ReleasedProject",
+        "lastEventAt": 1_000_000,
+        "pendingEventID": NSNull(),
+        "conversationTitle": "已发布版本主题",
+        "replyPreview": "已发布版本回复",
+      ]],
+      "records": [[
+        "id": "released-record",
+        "sessionID": "released-session",
+        "turnID": "released-turn",
+        "projectDisplayName": "ReleasedProject",
+        "completedAt": 1_000_000,
+        "isAcknowledged": false,
+        "notificationDelivered": true,
+        "conversationTitle": "已发布版本主题",
+        "replyPreview": "已发布版本回复",
+      ]],
+      "processedEventIDs": [processedEventID.uuidString],
+      "hookEventDiagnostics": [[
+        "id": diagnosticID.uuidString,
+        "eventName": "Stop",
+        "receivedAt": 1_000_000,
+        "ingress": "spool",
+        "payloadKind": "text",
+        "outcome": "readyToReview",
+      ]],
+      "lastUserPromptAt": 900_000,
+      "lastStopAt": 1_000_000,
+    ]
+    try JSONSerialization.data(withJSONObject: releasedState).write(to: stateURL)
+    let persistence = CompletionPersistence(fileURL: stateURL)
+
+    let loaded = try await persistence.load()
+
+    #expect(loaded.version == CompletionPersistedState.currentVersion)
+    #expect(loaded.sessions.count == 1)
+    #expect(loaded.sessions.first?.phase == .readyToReview)
+    #expect(loaded.sessions.first?.suppressesCurrentTurn == false)
+    #expect(loaded.sessions.first?.conversationTitle == "已发布版本主题")
+    #expect(loaded.records.first?.id == "released-record")
+    #expect(loaded.records.first?.replyPreview == "已发布版本回复")
+    #expect(loaded.processedEventIDs == [processedEventID])
+    #expect(loaded.hookEventDiagnostics.first?.id == diagnosticID)
+
+    try await persistence.save(loaded)
+    let rewrittenEnvelope = try #require(
+      JSONSerialization.jsonObject(with: Data(contentsOf: stateURL)) as? [String: Any]
+    )
+    #expect(rewrittenEnvelope["version"] as? Int == CompletionPersistedState.currentVersion)
+  }
+
+  @Test("不识别的状态版本仍按安全空状态处理")
   func discardsUnsupportedStateVersion() async throws {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

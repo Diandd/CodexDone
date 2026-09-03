@@ -5,6 +5,28 @@ import Testing
 @testable import CodexDone
 
 struct HookInstallerTests {
+  @Test("旧 Helper 会在已完成首次引导后重新打开更新引导")
+  func outdatedHelperReopensInitializationGuide() {
+    let updateContext = InitializationGuidePresentationPolicy.launchContext(
+      forceForUITest: false,
+      isUITest: false,
+      hasPresentedInitializationGuide: true,
+      helperRequiresUpdate: true
+    )
+
+    #expect(updateContext == .hookUpdate)
+    #expect(updateContext?.initialPage == .permissions)
+    #expect(updateContext?.presentsHookUpdateAlert == true)
+    #expect(
+      InitializationGuidePresentationPolicy.launchContext(
+        forceForUITest: false,
+        isUITest: false,
+        hasPresentedInitializationGuide: true,
+        helperRequiresUpdate: false
+      ) == nil
+    )
+  }
+
   @Test("只有不早于当前配置修改时间的 Hook 事件才能确认当前配置")
   func currentConfigurationRequiresCurrentGenerationEvent() {
     let configurationModifiedAt = Date(timeIntervalSince1970: 1_800_000_000)
@@ -231,8 +253,8 @@ struct HookInstallerTests {
     )
     let hooksURL = codexDirectory.appendingPathComponent("hooks.json")
     let receiptURL = root.appendingPathComponent("receipt.json")
-    let previousHelperURL = try makeHealthyHelper(in: previousAppDirectory)
-    let currentHelperURL = try makeHealthyHelper(in: currentAppDirectory)
+    let previousHelperURL = try makeHealthyHelper(in: previousAppDirectory, marker: "0.2")
+    let currentHelperURL = try makeHealthyHelper(in: currentAppDirectory, marker: "0.3")
     let previousCommand = "'\(previousHelperURL.path)'"
     let configuration: [String: Any] = [
       "hooks": [
@@ -257,6 +279,7 @@ struct HookInstallerTests {
 
     #expect(inspection.isInstalled)
     #expect(inspection.helperIsExecutable)
+    #expect(inspection.helperRequiresUpdate)
     #expect(inspection.handlerCommand == previousCommand)
   }
 
@@ -288,6 +311,7 @@ struct HookInstallerTests {
     let inspection = try await installer.install()
 
     #expect(inspection.isInstalled)
+    #expect(!inspection.helperRequiresUpdate)
     #expect(inspection.handlerCommand == "'\(installedHelperURL.path)'")
     #expect(FileManager.default.isExecutableFile(atPath: installedHelperURL.path))
     let installedMode =
@@ -358,15 +382,124 @@ struct HookInstallerTests {
     return root
   }
 
-  private func makeHealthyHelper(in root: URL) throws -> URL {
+  private func makeHealthyHelper(in root: URL, marker: String = "current") throws -> URL {
     let url = root.appendingPathComponent("CodexDoneHookBridge")
-    try Data("#!/bin/sh\nexit 0\n".utf8).write(to: url)
+    try Data("#!/bin/sh\n# \(marker)\nexit 0\n".utf8).write(to: url)
     try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
     return url
   }
 }
 
 struct SystemIntegrationServiceTests {
+  @Test @MainActor
+  func activationTreatsAnAlreadyActiveHostAsSuccessWithoutAnotherRequest() {
+    var coordinatedActivationCount = 0
+    var fallbackActivationCount = 0
+
+    let didActivate = SystemIntegrationService.requestApplicationActivation(
+      isAlreadyActive: true,
+      coordinatedActivation: {
+        coordinatedActivationCount += 1
+        return false
+      },
+      fallbackActivation: {
+        fallbackActivationCount += 1
+        return false
+      }
+    )
+
+    #expect(didActivate)
+    #expect(coordinatedActivationCount == 0)
+    #expect(fallbackActivationCount == 0)
+  }
+
+  @Test @MainActor
+  func activationUsesCooperativeHandoffBeforeTheLegacyFallback() {
+    var attempts: [String] = []
+
+    let didActivate = SystemIntegrationService.requestApplicationActivation(
+      isAlreadyActive: false,
+      coordinatedActivation: {
+        attempts.append("coordinated")
+        return false
+      },
+      fallbackActivation: {
+        attempts.append("fallback")
+        return true
+      }
+    )
+
+    #expect(didActivate)
+    #expect(attempts == ["coordinated", "fallback"])
+  }
+
+  @Test @MainActor
+  func returnTargetResolutionKeepsHostApplicationAndRejectsCodexDone() {
+    let terminalTarget = SystemIntegrationService.resolveCodexReturnTarget(
+      processIdentifier: 200,
+      currentProcessIdentifier: 100,
+      bundleIdentifier: "com.apple.Terminal",
+      currentBundleIdentifier: ProductConfiguration.bundleIdentifier,
+      isTerminated: false
+    )
+    #expect(
+      terminalTarget
+        == CodexReturnTarget(
+          processIdentifier: 200,
+          bundleIdentifier: "com.apple.Terminal"
+        )
+    )
+    #expect(
+      SystemIntegrationService.resolveCodexReturnTarget(
+        processIdentifier: 100,
+        currentProcessIdentifier: 100,
+        bundleIdentifier: ProductConfiguration.bundleIdentifier,
+        currentBundleIdentifier: ProductConfiguration.bundleIdentifier,
+        isTerminated: false
+      ) == nil
+    )
+    #expect(
+      SystemIntegrationService.resolveCodexReturnTarget(
+        processIdentifier: 201,
+        currentProcessIdentifier: 100,
+        bundleIdentifier: ProductConfiguration.bundleIdentifier,
+        currentBundleIdentifier: ProductConfiguration.bundleIdentifier,
+        isTerminated: false
+      ) == nil
+    )
+    #expect(
+      SystemIntegrationService.resolveCodexReturnTarget(
+        processIdentifier: 202,
+        currentProcessIdentifier: 100,
+        bundleIdentifier: "com.apple.Terminal",
+        currentBundleIdentifier: ProductConfiguration.bundleIdentifier,
+        isTerminated: true
+      ) == nil
+    )
+  }
+
+  @Test @MainActor
+  func cliSourceDoesNotOfferReturnWhileDesktopAndLegacyFallbackRemainAvailable() {
+    let cliTarget = CodexReturnTarget(
+      processIdentifier: 200,
+      bundleIdentifier: "com.apple.Terminal"
+    )
+    let desktopTarget = CodexReturnTarget(
+      processIdentifier: 201,
+      bundleIdentifier: SystemIntegrationService.codexBundleIdentifier
+    )
+
+    #expect(
+      SystemIntegrationService.returnRoute(for: cliTarget) == .unsupportedCLI
+    )
+    #expect(
+      SystemIntegrationService.returnRoute(for: desktopTarget) == .desktop
+    )
+    #expect(!SystemIntegrationService.canReturnToCodex(cliTarget))
+    #expect(SystemIntegrationService.canReturnToCodex(desktopTarget))
+    #expect(SystemIntegrationService.canReturnToCodex(nil))
+  }
+
   @Test @MainActor
   func codexResolutionUsesRegisteredBundleThenCodexOnlyPaths() {
     let registeredURL = URL(fileURLWithPath: "/Volumes/Apps/Codex.app")

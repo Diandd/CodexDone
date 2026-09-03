@@ -2,6 +2,59 @@ import AppKit
 import SwiftUI
 
 @MainActor
+final class HUDInteractionView: NSView {
+  let sessionID: String
+  var isOpenEnabled: Bool {
+    didSet { updateAccessibility() }
+  }
+  private let onOpenCodex: @MainActor (String) -> Void
+
+  init(
+    frame: NSRect = .zero,
+    sessionID: String,
+    isOpenEnabled: Bool = true,
+    onOpenCodex: @escaping @MainActor (String) -> Void
+  ) {
+    self.sessionID = sessionID
+    self.isOpenEnabled = isOpenEnabled
+    self.onOpenCodex = onOpenCodex
+    super.init(frame: frame)
+    updateAccessibility()
+  }
+
+  @available(*, unavailable)
+  required init?(coder: NSCoder) {
+    fatalError("init(coder:) has not been implemented")
+  }
+
+  override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+    isOpenEnabled
+  }
+
+  override func mouseDown(with event: NSEvent) {}
+
+  override func mouseUp(with event: NSEvent) {
+    guard isOpenEnabled else { return }
+    let location = convert(event.locationInWindow, from: nil)
+    guard bounds.contains(location) else { return }
+    onOpenCodex(sessionID)
+  }
+
+  override func accessibilityPerformPress() -> Bool {
+    guard isOpenEnabled else { return false }
+    onOpenCodex(sessionID)
+    return true
+  }
+
+  private func updateAccessibility() {
+    setAccessibilityElement(isOpenEnabled)
+    setAccessibilityRole(.button)
+    setAccessibilityIdentifier("completion-hud-open-codex")
+    setAccessibilityLabel(L10n.text("打开 Codex"))
+  }
+}
+
+@MainActor
 final class HUDWindowCoordinator {
   private let localization: ApplicationLocalization
   private let screensProvider: @MainActor () -> [NSScreen]
@@ -9,6 +62,8 @@ final class HUDWindowCoordinator {
   private var panels: [NSPanel] = []
   private var presentedSessionID: String?
   private var dismissalTask: Task<Void, Never>?
+  private var onOpenCodex: @MainActor (String) -> Void = { _ in }
+  private var canOpenCodex: @MainActor (String) -> Bool = { _ in true }
 
   init(
     localization: ApplicationLocalization = .shared,
@@ -18,6 +73,23 @@ final class HUDWindowCoordinator {
     self.localization = localization
     self.screensProvider = screensProvider
     self.focusedScreenProvider = focusedScreenProvider
+  }
+
+  func setOpenCodexAction(
+    _ action: @escaping @MainActor (String) -> Void
+  ) {
+    onOpenCodex = action
+  }
+
+  func setOpenCodexAvailability(
+    _ availability: @escaping @MainActor (String) -> Bool
+  ) {
+    canOpenCodex = availability
+  }
+
+  func requestOpenCodex(sessionID: String) {
+    onOpenCodex(sessionID)
+    dismiss(sessionID: sessionID)
   }
 
   func show(
@@ -51,12 +123,29 @@ final class HUDWindowCoordinator {
       panel.backgroundColor = .clear
       panel.isOpaque = false
       panel.hasShadow = true
-      panel.ignoresMouseEvents = true
+      let allowsOpenCodex = canOpenCodex(alert.sessionID)
+      panel.ignoresMouseEvents = !allowsOpenCodex
       panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-      panel.contentView = NSHostingView(
+      let containerView = NSView(
+        frame: NSRect(origin: .zero, size: size)
+      )
+      let hostingView = NSHostingView(
         rootView: CompletionHUDView(alert: alert, headline: headline)
           .applicationLocalized(using: localization)
       )
+      hostingView.frame = containerView.bounds
+      hostingView.autoresizingMask = [.width, .height]
+      let interactionView = HUDInteractionView(
+        frame: containerView.bounds,
+        sessionID: alert.sessionID,
+        isOpenEnabled: allowsOpenCodex
+      ) { [weak self] sessionID in
+        self?.requestOpenCodex(sessionID: sessionID)
+      }
+      interactionView.autoresizingMask = [.width, .height]
+      containerView.addSubview(hostingView)
+      containerView.addSubview(interactionView)
+      panel.contentView = containerView
       panel.orderFrontRegardless()
       panels.append(panel)
     }

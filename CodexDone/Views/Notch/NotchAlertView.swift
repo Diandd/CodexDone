@@ -5,6 +5,7 @@ import SwiftUI
 enum NotchAlertMotion {
   static let springDuration: TimeInterval = 0.34
   static let springBounce = 0.52
+  static let hoverScale: CGFloat = 1.018
 
   static var spring: Animation {
     .spring(duration: springDuration, bounce: springBounce)
@@ -138,6 +139,17 @@ struct NotchAlertLayout: Equatable, Sendable {
       auxiliaryTopRightArea: screen.auxiliaryTopRightArea
     )
   }
+
+  func interactionFrame(isExpanded: Bool) -> NSRect {
+    let width = isExpanded ? expandedWidth : compactWidth
+    let height = isExpanded ? Self.expandedHeight : compactHeight
+    return NSRect(
+      x: panelFrame.midX - width / 2,
+      y: panelFrame.maxY - contentTopInset - height,
+      width: width,
+      height: height
+    )
+  }
 }
 
 @MainActor
@@ -147,6 +159,7 @@ final class NotchAlertAnimationState {
   let headline: String
   let layout: NotchAlertLayout
   var isExpanded = false
+  var isHovered = false
   var unreadCount: Int
 
   init(
@@ -159,6 +172,114 @@ final class NotchAlertAnimationState {
     self.headline = headline
     self.layout = layout
     self.unreadCount = max(1, unreadCount)
+  }
+}
+
+@MainActor
+final class NotchInteractionView: NSView {
+  var sessionID: String?
+  var opensCodex: Bool {
+    didSet { updateInteractionAvailability() }
+  }
+  var acknowledgesAll: Bool {
+    didSet { updateInteractionAvailability() }
+  }
+  var isInteractionEnabled: Bool { opensCodex || acknowledgesAll }
+  private let onOpenCodex: @MainActor (String?, Bool) -> Void
+  private let onHoverChanged: @MainActor (Bool) -> Void
+  private var hoverTrackingArea: NSTrackingArea?
+  private(set) var isPointerInside = false
+
+  init(
+    sessionID: String?,
+    opensCodex: Bool = true,
+    acknowledgesAll: Bool,
+    onHoverChanged: @escaping @MainActor (Bool) -> Void = { _ in },
+    onOpenCodex: @escaping @MainActor (String?, Bool) -> Void
+  ) {
+    self.sessionID = sessionID
+    self.opensCodex = opensCodex
+    self.acknowledgesAll = acknowledgesAll
+    self.onHoverChanged = onHoverChanged
+    self.onOpenCodex = onOpenCodex
+    super.init(frame: .zero)
+    setAccessibilityRole(.button)
+    setAccessibilityIdentifier("completion-notch-open-codex")
+    updateInteractionAvailability()
+  }
+
+  @available(*, unavailable)
+  required init?(coder: NSCoder) {
+    fatalError("init(coder:) has not been implemented")
+  }
+
+  override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+    isInteractionEnabled
+  }
+
+  override func updateTrackingAreas() {
+    super.updateTrackingAreas()
+    if let hoverTrackingArea {
+      removeTrackingArea(hoverTrackingArea)
+    }
+    let trackingArea = NSTrackingArea(
+      rect: .zero,
+      options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+      owner: self,
+      userInfo: nil
+    )
+    addTrackingArea(trackingArea)
+    hoverTrackingArea = trackingArea
+  }
+
+  override func mouseEntered(with event: NSEvent) {
+    guard isInteractionEnabled else { return }
+    setPointerInside(true)
+  }
+
+  override func mouseExited(with event: NSEvent) {
+    guard isInteractionEnabled else { return }
+    setPointerInside(false)
+  }
+
+  override func mouseDown(with event: NSEvent) {}
+
+  override func mouseUp(with event: NSEvent) {
+    guard isInteractionEnabled else { return }
+    let location = convert(event.locationInWindow, from: nil)
+    guard bounds.contains(location) else { return }
+    onOpenCodex(sessionID, acknowledgesAll)
+  }
+
+  override func accessibilityPerformPress() -> Bool {
+    guard isInteractionEnabled else { return false }
+    onOpenCodex(sessionID, acknowledgesAll)
+    return true
+  }
+
+  private func setPointerInside(_ isInside: Bool) {
+    guard isPointerInside != isInside else { return }
+    isPointerInside = isInside
+    onHoverChanged(isInside)
+  }
+
+  func cancelPointerInteraction() {
+    setPointerInside(false)
+  }
+
+  private func updateInteractionAvailability() {
+    if !isInteractionEnabled {
+      cancelPointerInteraction()
+    }
+    setAccessibilityElement(isInteractionEnabled)
+    switch (acknowledgesAll, opensCodex) {
+    case (true, true):
+      setAccessibilityLabel(L10n.text("全部已查看并打开 Codex"))
+    case (true, false):
+      setAccessibilityLabel(L10n.text("全部已查看"))
+    case (false, _):
+      setAccessibilityLabel(L10n.text("打开 Codex"))
+    }
   }
 }
 
@@ -208,7 +329,12 @@ struct NotchAlertView: View {
       height: layout.panelFrame.height,
       alignment: .top
     )
+    .scaleEffect(
+      animationState.isHovered ? NotchAlertMotion.hoverScale : 1,
+      anchor: .top
+    )
     .animation(NotchAlertMotion.spring, value: isExpanded)
+    .animation(NotchAlertMotion.spring, value: animationState.isHovered)
     .accessibilityElement(children: .contain)
     .accessibilityIdentifier("completion-notch-alert")
   }
@@ -336,6 +462,8 @@ final class NotchWindowCoordinator {
   private let focusedScreenProvider: @MainActor () -> NSScreen?
   private var panels: [NSPanel] = []
   private var animationStates: [NotchAlertAnimationState] = []
+  private var interactionPanels: [NSPanel] = []
+  private var interactionViews: [NotchInteractionView] = []
   private var fadingPanelGroups: [UUID: [NSPanel]] = [:]
   private var fadeOutTasks: [UUID: Task<Void, Never>] = [:]
   private var expansionTask: Task<Void, Never>?
@@ -346,10 +474,16 @@ final class NotchWindowCoordinator {
   private var currentUnreadCount = 0
   private var currentDisplayStrategy: AlertDisplayStrategy?
   private var retainsUnreadIndicator = false
+  private var onOpenCodex: @MainActor (String?, Bool) -> Void = { _, _ in }
+  private var canOpenCodex: @MainActor (String?) -> Bool = { _ in true }
 
   var isPresenting: Bool { !panels.isEmpty }
   var presentedPanelCount: Int { panels.count }
   var retainedUnreadCount: Int { currentUnreadCount }
+
+  static func dismissalFadeDelay(hasExpandedState: Bool) -> TimeInterval {
+    hasExpandedState ? NotchAlertMotion.springDuration : 0
+  }
 
   init(
     localization: ApplicationLocalization = .shared,
@@ -359,6 +493,22 @@ final class NotchWindowCoordinator {
     self.localization = localization
     self.screensProvider = screensProvider
     self.focusedScreenProvider = focusedScreenProvider
+  }
+
+  func setOpenCodexAction(
+    _ action: @escaping @MainActor (String?, Bool) -> Void
+  ) {
+    onOpenCodex = action
+  }
+
+  func setOpenCodexAvailability(
+    _ availability: @escaping @MainActor (String?) -> Bool
+  ) {
+    canOpenCodex = availability
+  }
+
+  func requestOpenCodex(sessionID: String?, acknowledgesAll: Bool = true) {
+    onOpenCodex(sessionID, acknowledgesAll)
   }
 
   func show(
@@ -398,10 +548,33 @@ final class NotchWindowCoordinator {
         rootView: NotchAlertView(animationState: animationState)
           .applicationLocalized(using: localization)
       )
+      let interactionView = NotchInteractionView(
+        sessionID: alert.sessionID,
+        opensCodex: canOpenCodex(alert.sessionID),
+        acknowledgesAll: unreadCount != nil,
+        onHoverChanged: { [weak animationState] isHovered in
+          animationState?.isHovered = isHovered
+        }
+      ) {
+        [weak self] sessionID, acknowledgesAll in
+        self?.requestOpenCodex(
+          sessionID: sessionID,
+          acknowledgesAll: acknowledgesAll
+        )
+      }
+      let interactionPanel = Self.makeInteractionPanel(
+        frame: layout.interactionFrame(isExpanded: false),
+        screen: screen
+      )
+      interactionPanel.ignoresMouseEvents = !interactionView.isInteractionEnabled
+      interactionPanel.contentView = interactionView
       panel.alphaValue = 0
       panel.orderFrontRegardless()
+      interactionPanel.orderFrontRegardless()
       panels.append(panel)
       animationStates.append(animationState)
+      interactionPanels.append(interactionPanel)
+      interactionViews.append(interactionView)
     }
 
     NSAnimationContext.runAnimationGroup { context in
@@ -416,6 +589,11 @@ final class NotchWindowCoordinator {
       for state in self?.animationStates ?? [] {
         state.isExpanded = true
       }
+      self?.updateInteractionSurfaces(
+        isExpanded: true,
+        sessionID: alert.sessionID,
+        acknowledgesAll: unreadCount != nil
+      )
     }
     autoCollapseTask = Task { @MainActor [weak self] in
       do {
@@ -449,6 +627,11 @@ final class NotchWindowCoordinator {
       for state in animationStates {
         state.isExpanded = false
       }
+      updateInteractionSurfaces(
+        isExpanded: false,
+        sessionID: nil,
+        acknowledgesAll: retainedUnreadCount > 0
+      )
     }
   }
 
@@ -470,7 +653,15 @@ final class NotchWindowCoordinator {
     }
 
     if !panels.isEmpty {
-      guard expandedSessionID == nil, currentDisplayStrategy != displayStrategy else { return }
+      guard expandedSessionID == nil else { return }
+      if currentDisplayStrategy == displayStrategy {
+        updateInteractionSurfaces(
+          isExpanded: false,
+          sessionID: nil,
+          acknowledgesAll: true
+        )
+        return
+      }
     }
     presentCompactIndicator(displayStrategy: displayStrategy)
   }
@@ -485,6 +676,8 @@ final class NotchWindowCoordinator {
     postCollapseTask = nil
     let panelsToDismiss = panels
     let statesToCollapse = animationStates
+    let hasExpandedState = statesToCollapse.contains { $0.isExpanded }
+    removeInteractionPanelsImmediately()
     panels.removeAll()
     animationStates.removeAll()
     presentationGeneration = nil
@@ -495,7 +688,10 @@ final class NotchWindowCoordinator {
     for state in statesToCollapse {
       state.isExpanded = false
     }
-    fadeOut(panelsToDismiss)
+    fadeOut(
+      panelsToDismiss,
+      after: Self.dismissalFadeDelay(hasExpandedState: hasExpandedState)
+    )
   }
 
   static func makePanel(frame: NSRect, screen: NSScreen?) -> NSPanel {
@@ -517,12 +713,37 @@ final class NotchWindowCoordinator {
     return panel
   }
 
+  static func makeInteractionPanel(frame: NSRect, screen: NSScreen?) -> NSPanel {
+    let panel = NSPanel(
+      contentRect: frame,
+      styleMask: [.borderless, .nonactivatingPanel],
+      backing: .buffered,
+      defer: false,
+      screen: screen
+    )
+    panel.level = .statusBar
+    panel.backgroundColor = .clear
+    panel.isOpaque = false
+    panel.hasShadow = false
+    panel.ignoresMouseEvents = false
+    panel.hidesOnDeactivate = false
+    panel.becomesKeyOnlyIfNeeded = true
+    panel.animationBehavior = .none
+    panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+    return panel
+  }
+
   private func collapseAfterDisplay(generation: UUID) {
     expandedSessionID = nil
     for state in animationStates {
       state.unreadCount = max(1, retainedUnreadCount)
       state.isExpanded = false
     }
+    updateInteractionSurfaces(
+      isExpanded: false,
+      sessionID: nil,
+      acknowledgesAll: retainedUnreadCount > 0
+    )
     guard !retainsUnreadIndicator || retainedUnreadCount == 0 else { return }
 
     postCollapseTask?.cancel()
@@ -539,6 +760,7 @@ final class NotchWindowCoordinator {
 
   private func fadeOutCurrentPanels() {
     let panelsToDismiss = panels
+    removeInteractionPanelsImmediately()
     panels.removeAll()
     animationStates.removeAll()
     presentationGeneration = nil
@@ -548,16 +770,32 @@ final class NotchWindowCoordinator {
     fadeOut(panelsToDismiss)
   }
 
-  private func fadeOut(_ panelsToDismiss: [NSPanel]) {
+  private func fadeOut(
+    _ panelsToDismiss: [NSPanel],
+    after delay: TimeInterval = 0
+  ) {
     let fadeID = UUID()
     fadingPanelGroups[fadeID] = panelsToDismiss
-    NSAnimationContext.runAnimationGroup { context in
-      context.duration = Self.collapseDuration
-      for panel in panelsToDismiss {
-        panel.animator().alphaValue = 0
-      }
-    }
     fadeOutTasks[fadeID] = Task { @MainActor [weak self] in
+      if delay > 0 {
+        do {
+          try await Task.sleep(for: .seconds(delay))
+        } catch {
+          return
+        }
+      }
+
+      guard let panels = self?.fadingPanelGroups[fadeID] else { return }
+      NSAnimationContext.runAnimationGroup(
+        { context in
+          context.duration = Self.collapseDuration
+          for panel in panels {
+            panel.animator().alphaValue = 0
+          }
+        },
+        completionHandler: nil
+      )
+
       do {
         try await Task.sleep(for: .seconds(Self.collapseDuration))
       } catch {
@@ -588,6 +826,7 @@ final class NotchWindowCoordinator {
     for panel in panels {
       panel.orderOut(nil)
     }
+    removeInteractionPanelsImmediately()
     for group in fadingPanelGroups.values {
       for panel in group {
         panel.orderOut(nil)
@@ -599,6 +838,36 @@ final class NotchWindowCoordinator {
     presentationGeneration = nil
     expandedSessionID = nil
     currentDisplayStrategy = nil
+  }
+
+  private func removeInteractionPanelsImmediately() {
+    for interactionView in interactionViews {
+      interactionView.cancelPointerInteraction()
+    }
+    for panel in interactionPanels {
+      panel.orderOut(nil)
+    }
+    interactionPanels.removeAll()
+    interactionViews.removeAll()
+  }
+
+  private func updateInteractionSurfaces(
+    isExpanded: Bool,
+    sessionID: String?,
+    acknowledgesAll: Bool
+  ) {
+    for index in interactionPanels.indices {
+      guard animationStates.indices.contains(index) else { continue }
+      interactionViews[index].sessionID = sessionID
+      interactionViews[index].opensCodex = canOpenCodex(sessionID)
+      interactionViews[index].acknowledgesAll = acknowledgesAll
+      interactionPanels[index].ignoresMouseEvents =
+        !interactionViews[index].isInteractionEnabled
+      interactionPanels[index].setFrame(
+        animationStates[index].layout.interactionFrame(isExpanded: isExpanded),
+        display: false
+      )
+    }
   }
 
   private func presentCompactIndicator(displayStrategy: AlertDisplayStrategy) {
@@ -623,10 +892,33 @@ final class NotchWindowCoordinator {
         rootView: NotchAlertView(animationState: animationState)
           .applicationLocalized(using: localization)
       )
+      let interactionView = NotchInteractionView(
+        sessionID: nil,
+        opensCodex: canOpenCodex(nil),
+        acknowledgesAll: true,
+        onHoverChanged: { [weak animationState] isHovered in
+          animationState?.isHovered = isHovered
+        }
+      ) {
+        [weak self] sessionID, acknowledgesAll in
+        self?.requestOpenCodex(
+          sessionID: sessionID,
+          acknowledgesAll: acknowledgesAll
+        )
+      }
+      let interactionPanel = Self.makeInteractionPanel(
+        frame: layout.interactionFrame(isExpanded: false),
+        screen: screen
+      )
+      interactionPanel.ignoresMouseEvents = !interactionView.isInteractionEnabled
+      interactionPanel.contentView = interactionView
       panel.alphaValue = 0
       panel.orderFrontRegardless()
+      interactionPanel.orderFrontRegardless()
       panels.append(panel)
       animationStates.append(animationState)
+      interactionPanels.append(interactionPanel)
+      interactionViews.append(interactionView)
     }
 
     NSAnimationContext.runAnimationGroup { context in

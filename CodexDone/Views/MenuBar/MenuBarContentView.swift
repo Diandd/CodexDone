@@ -4,6 +4,7 @@ import SwiftUI
 struct MenuBarContentView: View {
   @Environment(AppEnvironment.self) private var environment
   @AppStorage("alerts.visualMode") private var visualMode = AlertVisualMode.defaultMode.rawValue
+  let openCodex: () -> Void
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
@@ -110,6 +111,25 @@ struct MenuBarContentView: View {
 
           Spacer(minLength: 8)
 
+          Menu {
+            if record.conversationTitle != nil {
+              Button("屏蔽类似发送内容") {
+                environment.blockSimilarSubmittedMessages(for: record)
+              }
+            }
+            Button("屏蔽此项目") {
+              environment.blockProject(for: record)
+            }
+          } label: {
+            Image(systemName: "bell.slash")
+          }
+          .menuStyle(.borderlessButton)
+          .controlSize(.small)
+          .fixedSize()
+          .help("添加屏蔽规则")
+          .accessibilityLabel("添加屏蔽规则")
+          .accessibilityIdentifier("menu-block-\(record.id)")
+
           Button("已查看") {
             environment.completionStore.acknowledge(recordID: record.id)
           }
@@ -170,10 +190,12 @@ struct MenuBarContentView: View {
         .accessibilityLabel(AlertVisualMode(storedValue: visualMode).title)
         .accessibilityIdentifier("menu-visual-mode-menu")
 
-        Button("打开 Codex") {
-          environment.openCodex()
+        if environment.canOpenLatestCodex {
+          Button("打开 Codex") {
+            openCodex()
+          }
+          .accessibilityIdentifier("menu-open-codex")
         }
-        .accessibilityIdentifier("menu-open-codex")
 
         Spacer()
 
@@ -186,7 +208,9 @@ struct MenuBarContentView: View {
         .accessibilityIdentifier("menu-quit")
       }
 
-      if let failure = environment.systemIntegrationService.lastCodexOpenFailure {
+      if environment.canOpenLatestCodex,
+        let failure = environment.systemIntegrationService.lastCodexOpenFailure
+      {
         Text(failure.userMessage)
           .font(.caption)
           .foregroundStyle(.orange)

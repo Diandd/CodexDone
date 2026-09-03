@@ -2,21 +2,8 @@ import Darwin
 import Foundation
 
 enum HookBridgeTransport {
-  private enum FileLockResult {
-    case acquired
-    case busy
-    case failed
-  }
-
-  #if DEBUG
-    private static let wakeExecutableOverrideKey = "CODEXDONE_BRIDGE_WAKE_EXECUTABLE"
-    private static let disableWakeKey = "CODEXDONE_BRIDGE_DISABLE_WAKE"
-  #endif
-  private static let mainApplicationBundleIdentifier = "com.dianstudios.codexdone"
   private static let socketAcknowledgement: UInt8 = 0x06
   private static let socketTimeoutMilliseconds: Int32 = 50
-  private static let wakeCooldownSeconds: TimeInterval = 30
-  private static let wakeCooldownFileName = ".wake-cooldown"
 
   static func deliver(_ event: DesktopCompletionHookEvent) {
     let encoder = JSONEncoder()
@@ -26,9 +13,11 @@ enum HookBridgeTransport {
     if sendToSocket(data, socketURL: HookRuntimePaths.socketURL) {
       return
     }
-    if spool(data, eventID: event.eventID, directoryURL: HookRuntimePaths.spoolDirectoryURL) {
-      wakeMainApplication(cooldownDirectoryURL: HookRuntimePaths.spoolDirectoryURL)
-    }
+    _ = spool(
+      data,
+      eventID: event.eventID,
+      directoryURL: HookRuntimePaths.spoolDirectoryURL
+    )
   }
 
   private static func sendToSocket(_ data: Data, socketURL: URL) -> Bool {
@@ -228,161 +217,5 @@ enum HookBridgeTransport {
     guard descriptor >= 0 else { return }
     defer { Darwin.close(descriptor) }
     _ = Darwin.fsync(descriptor)
-  }
-
-  private static func wakeMainApplication(cooldownDirectoryURL: URL) {
-    let executablePath: String
-    let waitsForCompletion: Bool
-    #if DEBUG
-      let environment = ProcessInfo.processInfo.environment
-      guard environment[disableWakeKey] != "1" else { return }
-      if let override = environment[wakeExecutableOverrideKey] {
-        executablePath = override
-        waitsForCompletion = true
-      } else {
-        executablePath = "/usr/bin/open"
-        waitsForCompletion = false
-      }
-    #else
-      executablePath = "/usr/bin/open"
-      waitsForCompletion = false
-    #endif
-    guard FileManager.default.isExecutableFile(atPath: executablePath) else { return }
-
-    let cooldownURL = cooldownDirectoryURL.appendingPathComponent(wakeCooldownFileName)
-    let descriptor = Darwin.open(cooldownURL.path, O_CREAT | O_RDWR, 0o600)
-    guard descriptor >= 0 else {
-      _ = launchMainApplication(
-        executablePath: executablePath,
-        waitsForCompletion: waitsForCompletion
-      )
-      return
-    }
-    defer { Darwin.close(descriptor) }
-    _ = Darwin.fchmod(descriptor, 0o600)
-    let descriptorFlags = fcntl(descriptor, F_GETFD, 0)
-    if descriptorFlags >= 0 {
-      _ = fcntl(descriptor, F_SETFD, descriptorFlags | FD_CLOEXEC)
-    }
-
-    switch acquireFileLock(descriptor) {
-    case .busy:
-      return
-    case .failed:
-      _ = launchMainApplication(
-        executablePath: executablePath,
-        waitsForCompletion: waitsForCompletion
-      )
-      return
-    case .acquired:
-      break
-    }
-    defer { releaseFileLock(descriptor) }
-
-    let now = Date().timeIntervalSince1970
-    if let previousWake = readWakeTimestamp(from: descriptor) {
-      let elapsed = now - previousWake
-      if elapsed >= 0, elapsed < wakeCooldownSeconds {
-        return
-      }
-    }
-
-    guard
-      launchMainApplication(
-        executablePath: executablePath,
-        waitsForCompletion: waitsForCompletion
-      )
-    else {
-      return
-    }
-    writeWakeTimestamp(now, to: descriptor)
-  }
-
-  private static func acquireFileLock(_ descriptor: Int32) -> FileLockResult {
-    var lock = Darwin.flock()
-    lock.l_type = Int16(F_WRLCK)
-    lock.l_whence = Int16(SEEK_SET)
-    lock.l_start = 0
-    lock.l_len = 0
-    guard fcntl(descriptor, F_SETLK, &lock) == 0 else {
-      if errno == EACCES || errno == EAGAIN {
-        return .busy
-      }
-      return .failed
-    }
-    return .acquired
-  }
-
-  private static func releaseFileLock(_ descriptor: Int32) {
-    var lock = Darwin.flock()
-    lock.l_type = Int16(F_UNLCK)
-    lock.l_whence = Int16(SEEK_SET)
-    lock.l_start = 0
-    lock.l_len = 0
-    _ = fcntl(descriptor, F_SETLK, &lock)
-  }
-
-  private static func launchMainApplication(
-    executablePath: String,
-    waitsForCompletion: Bool
-  ) -> Bool {
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: executablePath)
-    process.arguments = ["-g", "-b", mainApplicationBundleIdentifier]
-    process.standardInput = FileHandle.nullDevice
-    process.standardOutput = FileHandle.nullDevice
-    process.standardError = FileHandle.nullDevice
-    do {
-      try process.run()
-      #if DEBUG
-        if waitsForCompletion {
-          process.waitUntilExit()
-        }
-      #endif
-      return true
-    } catch {
-      return false
-    }
-  }
-
-  private static func readWakeTimestamp(from descriptor: Int32) -> TimeInterval? {
-    guard Darwin.lseek(descriptor, 0, SEEK_SET) >= 0 else { return nil }
-    var bytes = [UInt8](repeating: 0, count: 64)
-    let count = bytes.withUnsafeMutableBytes { rawBuffer in
-      Darwin.read(descriptor, rawBuffer.baseAddress, rawBuffer.count)
-    }
-    guard count > 0 else { return nil }
-    let text = String(decoding: bytes.prefix(count), as: UTF8.self)
-      .trimmingCharacters(in: .whitespacesAndNewlines)
-    return TimeInterval(text)
-  }
-
-  private static func writeWakeTimestamp(_ timestamp: TimeInterval, to descriptor: Int32) {
-    let data = Data(String(timestamp).utf8)
-    guard
-      Darwin.ftruncate(descriptor, 0) == 0,
-      Darwin.lseek(descriptor, 0, SEEK_SET) >= 0
-    else {
-      return
-    }
-    let didWriteAllBytes = data.withUnsafeBytes { rawBuffer in
-      guard var pointer = rawBuffer.baseAddress else { return false }
-      var remaining = rawBuffer.count
-      while remaining > 0 {
-        let written = Darwin.write(descriptor, pointer, remaining)
-        if written > 0 {
-          remaining -= written
-          pointer = pointer.advanced(by: written)
-        } else if written < 0, errno == EINTR {
-          continue
-        } else {
-          return false
-        }
-      }
-      return true
-    }
-    if didWriteAllBytes {
-      _ = Darwin.fsync(descriptor)
-    }
   }
 }

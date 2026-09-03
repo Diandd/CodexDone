@@ -54,6 +54,7 @@ struct CompletionSessionState: Codable, Equatable, Identifiable, Sendable {
   var pendingEventID: UUID?
   var conversationTitle: String? = nil
   var replyPreview: String? = nil
+  var suppressesCurrentTurn = false
 }
 
 struct ConversationCompletionRecord: Codable, Equatable, Identifiable, Sendable {
@@ -69,7 +70,7 @@ struct ConversationCompletionRecord: Codable, Equatable, Identifiable, Sendable 
 }
 
 struct CompletionPersistedState: Codable, Equatable, Sendable {
-  static let currentVersion = 5
+  static let currentVersion = 6
 
   var version = currentVersion
   var sessions: [CompletionSessionState] = []
@@ -131,6 +132,7 @@ enum HookEventDiagnosticOutcome: String, Codable, Equatable, Sendable {
   case ignoredOlderEvent
   case cancelledByNewPrompt
   case supersededByNewStop
+  case suppressedByRule
   case readyToReview
   case restoredWithoutAlert
 
@@ -143,6 +145,7 @@ enum HookEventDiagnosticOutcome: String, Codable, Equatable, Sendable {
     case .ignoredOlderEvent: L10n.text("忽略：事件顺序较旧")
     case .cancelledByNewPrompt: L10n.text("已被新 Prompt 取消")
     case .supersededByNewStop: L10n.text("已被新 Stop 替换")
+    case .suppressedByRule: L10n.text("已按屏蔽规则忽略")
     case .readyToReview: L10n.text("已生成待查看")
     case .restoredWithoutAlert: L10n.text("已恢复待查看，未补发提醒")
     }

@@ -33,6 +33,10 @@ final class DesktopCompletionStore {
 
   var unreadCount: Int { unreadRecords.count }
 
+  func hasProcessedEventID(_ eventID: UUID) -> Bool {
+    processedEventIDs.contains(eventID)
+  }
+
   func recordIDs(for sessionID: String) -> [String] {
     Array(records.lazy.filter { $0.sessionID == sessionID }.map(\.id))
   }
@@ -328,10 +332,14 @@ final class DesktopCompletionStore {
             diagnostics: &candidateHookEventDiagnostics
           )
         }
-        diagnosticOutcome =
+        let isTrackingTurn =
           previousSession?.phase == .running
-            || previousSession?.phase == .pendingCompletionDebounce
-          ? .waitingForDebounce
+          || previousSession?.phase == .pendingCompletionDebounce
+        diagnosticOutcome =
+          isTrackingTurn
+          ? ((previousSession?.suppressesCurrentTurn == true || event.suppressedByRule)
+            ? .suppressedByRule
+            : .waitingForDebounce)
           : .ignoredWithoutPrompt
       }
 

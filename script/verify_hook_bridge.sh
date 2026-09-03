@@ -7,6 +7,8 @@ HELPER="$APP_BUNDLE/Contents/Helpers/CodexDoneHookBridge"
 SMOKE_DIR="$(mktemp -d /tmp/codexdone-hookbridge.XXXXXX)"
 SPOOL_DIR="$SMOKE_DIR/spool"
 SOCKET_PATH="$SMOKE_DIR/missing.sock"
+WAKE_MARKER="$SMOKE_DIR/launch-marker.txt"
+WAKE_EXECUTABLE="$SMOKE_DIR/legacy-wake-test.sh"
 
 cleanup() {
   if [[ "$SMOKE_DIR" == /tmp/codexdone-hookbridge.* ]]; then
@@ -20,9 +22,17 @@ if [[ ! -x "$HELPER" ]]; then
   exit 1
 fi
 
+if ! /usr/bin/grep -aFq 'CODEXDONE_BRIDGE_SOCKET_PATH' "$HELPER"; then
+  printf 'Isolated Hook Bridge verification requires a Debug app; use verify_release_bundle.sh for Release apps.\n' >&2
+  exit 2
+fi
+
+printf '#!/bin/sh\nprintf "launched\\n" >> "$CODEXDONE_BRIDGE_WAKE_MARKER"\n' > "$WAKE_EXECUTABLE"
+chmod 700 "$WAKE_EXECUTABLE"
+
 prompt_output="$({
   printf '%s' '{"hook_event_name":"UserPromptSubmit","session_id":"smoke-session","turn_id":"smoke-turn","cwd":"/tmp/SafeProject","prompt":"## My request:\n验证菜单主题","transcript_path":"/private/ignored.jsonl"}'
-} | CODEXDONE_BRIDGE_SOCKET_PATH="$SOCKET_PATH" CODEXDONE_BRIDGE_SPOOL_DIR="$SPOOL_DIR" CODEXDONE_BRIDGE_DISABLE_WAKE=1 "$HELPER")"
+} | CODEXDONE_BRIDGE_SOCKET_PATH="$SOCKET_PATH" CODEXDONE_BRIDGE_SPOOL_DIR="$SPOOL_DIR" CODEXDONE_BRIDGE_WAKE_EXECUTABLE="$WAKE_EXECUTABLE" CODEXDONE_BRIDGE_WAKE_MARKER="$WAKE_MARKER" "$HELPER")"
 
 if [[ -n "$prompt_output" ]]; then
   printf 'UserPromptSubmit wrote unexpected stdout.\n' >&2
@@ -31,7 +41,7 @@ fi
 
 stop_output="$({
   printf '%s' '{"hook_event_name":"Stop","session_id":"smoke-session","turn_id":"smoke-turn","cwd":"/tmp/SafeProject","last_assistant_message":"已生成桥接回复预览。","transcript_path":"/private/ignored.jsonl"}'
-} | CODEXDONE_BRIDGE_SOCKET_PATH="$SOCKET_PATH" CODEXDONE_BRIDGE_SPOOL_DIR="$SPOOL_DIR" CODEXDONE_BRIDGE_DISABLE_WAKE=1 "$HELPER")"
+} | CODEXDONE_BRIDGE_SOCKET_PATH="$SOCKET_PATH" CODEXDONE_BRIDGE_SPOOL_DIR="$SPOOL_DIR" CODEXDONE_BRIDGE_WAKE_EXECUTABLE="$WAKE_EXECUTABLE" CODEXDONE_BRIDGE_WAKE_MARKER="$WAKE_MARKER" "$HELPER")"
 
 if [[ "$stop_output" != '{"continue":true}' ]]; then
   printf 'Stop stdout contract failed: %s\n' "$stop_output" >&2
@@ -41,6 +51,11 @@ fi
 event_count="$(find "$SPOOL_DIR" -maxdepth 1 -type f -name '*.json' | wc -l | tr -d ' ')"
 if [[ "$event_count" != "2" ]]; then
   printf 'Expected 2 spooled events, found %s.\n' "$event_count" >&2
+  exit 1
+fi
+
+if [[ -e "$WAKE_MARKER" || -e "$SPOOL_DIR/.wake-cooldown" ]]; then
+  printf 'Hook Bridge unexpectedly attempted to launch CodexDone.\n' >&2
   exit 1
 fi
 
@@ -71,4 +86,4 @@ if ! rg -q '"conversationTitle"' "$SPOOL_DIR" || ! rg -q '"replyPreview"' "$SPOO
   exit 1
 fi
 
-printf 'Hook Bridge stdout, fallback, bounded display data, and privacy checks passed.\n'
+printf 'Hook Bridge stdout, no-launch fallback, bounded display data, and privacy checks passed.\n'

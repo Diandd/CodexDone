@@ -116,6 +116,16 @@ struct LocalizationTests {
     #expect(L10n.text("接收方式", bundle: english) == "Delivery Path")
     #expect(L10n.text("内容形态", bundle: english) == "Content Shape")
     #expect(L10n.text("处理结果", bundle: english) == "Processing Result")
+    #expect(L10n.text("发送内容", bundle: english) == "Submitted Message")
+    #expect(L10n.text("回复内容", bundle: english) == "Assistant Reply")
+    #expect(
+      L10n.text("输入回复正则", bundle: english)
+        == "Enter an assistant-reply regular expression"
+    )
+    #expect(
+      L10n.text("屏蔽类似发送内容", bundle: english)
+        == "Block Similar Submitted Messages"
+    )
     #expect(L10n.text("已展开", bundle: english) == "Expanded")
     #expect(L10n.text("已收起", bundle: english) == "Collapsed")
     #expect(L10n.text("检查更新", bundle: english) == "Check for Updates")
@@ -185,6 +195,22 @@ struct LocalizationTests {
     #expect(translations.count >= 170)
     for value in translations.values {
       #expect(!containsHanCharacter(value))
+    }
+  }
+
+  @Test("中英文固定界面文案末尾不使用句号")
+  func localizedInterfaceCopyHasNoTerminalPeriods() throws {
+    for language in ["zh-Hans", "en"] {
+      let bundle = try localizedBundle(language)
+      let url = try #require(bundle.url(forResource: "Localizable", withExtension: "strings"))
+      let data = try Data(contentsOf: url)
+      let object = try PropertyListSerialization.propertyList(from: data, format: nil)
+      let translations = try #require(object as? [String: String])
+
+      for value in translations.values {
+        #expect(!value.hasSuffix("。"))
+        #expect(!value.hasSuffix("."))
+      }
     }
   }
 

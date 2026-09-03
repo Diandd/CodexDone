@@ -8,6 +8,7 @@ enum HookDisplayState: Equatable, Sendable {
   case checking
   case enabled
   case ran
+  case outdated
   case untrusted
   case modified
   case disabled
@@ -21,6 +22,7 @@ enum HookDisplayState: Equatable, Sendable {
     case .checking: L10n.text("正在检查")
     case .enabled: L10n.text("已启用")
     case .ran: L10n.text("已运行")
+    case .outdated: L10n.text("需更新")
     case .untrusted: L10n.text("待信任")
     case .modified: L10n.text("需重新信任")
     case .disabled: L10n.text("已关闭")
@@ -36,7 +38,8 @@ enum HookDisplayState: Equatable, Sendable {
     case .ran: "checkmark.circle"
     case .checking: "arrow.triangle.2.circlepath"
     case .notInstalled: "minus.circle"
-    case .untrusted, .modified, .disabled, .missing: "exclamationmark.triangle.fill"
+    case .outdated, .untrusted, .modified, .disabled, .missing:
+      "exclamationmark.triangle.fill"
     case .notChecked, .unavailable: "questionmark.circle"
     }
   }
@@ -45,9 +48,238 @@ enum HookDisplayState: Equatable, Sendable {
 
   var needsAction: Bool {
     switch self {
-    case .untrusted, .modified, .disabled, .missing, .notInstalled: true
+    case .outdated, .untrusted, .modified, .disabled, .missing, .notInstalled: true
     default: false
     }
+  }
+}
+
+@MainActor
+enum HUDAlertClickAction {
+  static func perform(
+    sessionID: String,
+    unreadRecordID: String?,
+    acknowledgeRecord: (String) -> Void,
+    returnToCodex: (String) -> Void
+  ) {
+    if let unreadRecordID {
+      acknowledgeRecord(unreadRecordID)
+    }
+    returnToCodex(sessionID)
+  }
+}
+
+@MainActor
+enum NotchAlertClickAction {
+  static func perform(
+    requestedSessionID: String?,
+    latestUnreadSessionID: String?,
+    acknowledgesAll: Bool,
+    opensCodex: Bool,
+    acknowledgeAll: () -> Void,
+    returnToCodex: (String?) -> Void
+  ) {
+    let returnSessionID = requestedSessionID ?? latestUnreadSessionID
+    if acknowledgesAll {
+      acknowledgeAll()
+    }
+    if opensCodex {
+      returnToCodex(returnSessionID)
+    }
+  }
+}
+
+@MainActor
+@Observable
+final class AlertSuppressionRuleStore {
+  private(set) var rules: AlertSuppressionRules
+  private(set) var operationMessage: String?
+
+  @ObservationIgnored private let fileURL: URL
+  @ObservationIgnored private let fileManager: FileManager
+
+  init(
+    fileURL: URL = HookRuntimePaths.alertSuppressionRulesURL,
+    fileManager: FileManager = .default
+  ) {
+    self.fileURL = fileURL
+    self.fileManager = fileManager
+    rules = AlertSuppressionRulesFile.load(from: fileURL, fileManager: fileManager)
+  }
+
+  var submittedMessageKeywords: [String] { rules.submittedMessageKeywords }
+  var submittedMessageRegexPatterns: [String] { rules.submittedMessageRegexPatterns }
+  var assistantReplyRegexPatterns: [String] { rules.assistantReplyRegexPatterns }
+  var projectNames: [String] { rules.projectNames }
+
+  @discardableResult
+  func addSubmittedMessageKeyword(_ value: String) -> Bool {
+    add(value, to: .submittedMessageKeyword)
+  }
+
+  @discardableResult
+  func addProjectName(_ value: String) -> Bool {
+    add(value, to: .projectName)
+  }
+
+  @discardableResult
+  func addSubmittedMessageRegex(_ value: String) -> Bool {
+    add(value, to: .submittedMessageRegex)
+  }
+
+  @discardableResult
+  func addAssistantReplyRegex(_ value: String) -> Bool {
+    add(value, to: .assistantReplyRegex)
+  }
+
+  func removeSubmittedMessageKeyword(_ value: String) {
+    update(
+      AlertSuppressionRules(
+        submittedMessageKeywords: rules.submittedMessageKeywords.filter {
+          !Self.sameRule($0, value)
+        },
+        submittedMessageRegexPatterns: rules.submittedMessageRegexPatterns,
+        assistantReplyRegexPatterns: rules.assistantReplyRegexPatterns,
+        projectNames: rules.projectNames
+      )
+    )
+  }
+
+  func removeSubmittedMessageRegex(_ value: String) {
+    update(
+      AlertSuppressionRules(
+        submittedMessageKeywords: rules.submittedMessageKeywords,
+        submittedMessageRegexPatterns: rules.submittedMessageRegexPatterns.filter {
+          $0 != value
+        },
+        assistantReplyRegexPatterns: rules.assistantReplyRegexPatterns,
+        projectNames: rules.projectNames
+      )
+    )
+  }
+
+  func removeAssistantReplyRegex(_ value: String) {
+    update(
+      AlertSuppressionRules(
+        submittedMessageKeywords: rules.submittedMessageKeywords,
+        submittedMessageRegexPatterns: rules.submittedMessageRegexPatterns,
+        assistantReplyRegexPatterns: rules.assistantReplyRegexPatterns.filter {
+          $0 != value
+        },
+        projectNames: rules.projectNames
+      )
+    )
+  }
+
+  func removeProjectName(_ value: String) {
+    update(
+      AlertSuppressionRules(
+        submittedMessageKeywords: rules.submittedMessageKeywords,
+        submittedMessageRegexPatterns: rules.submittedMessageRegexPatterns,
+        assistantReplyRegexPatterns: rules.assistantReplyRegexPatterns,
+        projectNames: rules.projectNames.filter { !Self.sameRule($0, value) }
+      )
+    )
+  }
+
+  private enum RuleKind: Equatable {
+    case submittedMessageKeyword
+    case submittedMessageRegex
+    case assistantReplyRegex
+    case projectName
+  }
+
+  private func add(_ value: String, to kind: RuleKind) -> Bool {
+    let normalized: String?
+    switch kind {
+    case .submittedMessageRegex, .assistantReplyRegex:
+      normalized = AlertSuppressionRules.normalizedRegexRule(value)
+    case .submittedMessageKeyword:
+      normalized = AlertSuppressionRules.normalizedKeywordRule(value)
+    case .projectName:
+      normalized = AlertSuppressionRules.normalizedRule(value)
+    }
+    guard let normalized else {
+      operationMessage = kind == .submittedMessageRegex || kind == .assistantReplyRegex
+        ? L10n.text("请输入有效的正则表达式")
+        : L10n.text("请输入有效的屏蔽规则")
+      return false
+    }
+    let existing: [String]
+    switch kind {
+    case .submittedMessageKeyword: existing = rules.submittedMessageKeywords
+    case .submittedMessageRegex: existing = rules.submittedMessageRegexPatterns
+    case .assistantReplyRegex: existing = rules.assistantReplyRegexPatterns
+    case .projectName: existing = rules.projectNames
+    }
+    let containsDuplicate = kind == .submittedMessageRegex || kind == .assistantReplyRegex
+      ? existing.contains(normalized)
+      : existing.contains(where: { Self.sameRule($0, normalized) })
+    if containsDuplicate {
+      operationMessage = nil
+      return true
+    }
+    guard existing.count < AlertSuppressionRules.maximumRuleCount else {
+      operationMessage = L10n.format(
+        "每类最多可添加 %lld 条规则",
+        Int64(AlertSuppressionRules.maximumRuleCount)
+      )
+      return false
+    }
+
+    let updated: AlertSuppressionRules
+    switch kind {
+    case .submittedMessageKeyword:
+      updated = AlertSuppressionRules(
+        submittedMessageKeywords: rules.submittedMessageKeywords + [normalized],
+        submittedMessageRegexPatterns: rules.submittedMessageRegexPatterns,
+        assistantReplyRegexPatterns: rules.assistantReplyRegexPatterns,
+        projectNames: rules.projectNames
+      )
+    case .submittedMessageRegex:
+      updated = AlertSuppressionRules(
+        submittedMessageKeywords: rules.submittedMessageKeywords,
+        submittedMessageRegexPatterns: rules.submittedMessageRegexPatterns + [normalized],
+        assistantReplyRegexPatterns: rules.assistantReplyRegexPatterns,
+        projectNames: rules.projectNames
+      )
+    case .assistantReplyRegex:
+      updated = AlertSuppressionRules(
+        submittedMessageKeywords: rules.submittedMessageKeywords,
+        submittedMessageRegexPatterns: rules.submittedMessageRegexPatterns,
+        assistantReplyRegexPatterns: rules.assistantReplyRegexPatterns + [normalized],
+        projectNames: rules.projectNames
+      )
+    case .projectName:
+      updated = AlertSuppressionRules(
+        submittedMessageKeywords: rules.submittedMessageKeywords,
+        submittedMessageRegexPatterns: rules.submittedMessageRegexPatterns,
+        assistantReplyRegexPatterns: rules.assistantReplyRegexPatterns,
+        projectNames: rules.projectNames + [normalized]
+      )
+    }
+    return update(updated)
+  }
+
+  @discardableResult
+  private func update(_ updated: AlertSuppressionRules) -> Bool {
+    guard updated != rules else {
+      operationMessage = nil
+      return true
+    }
+    do {
+      try AlertSuppressionRulesFile.save(updated, to: fileURL, fileManager: fileManager)
+      rules = updated
+      operationMessage = nil
+      return true
+    } catch {
+      operationMessage = L10n.text("屏蔽规则无法保存")
+      return false
+    }
+  }
+
+  private static func sameRule(_ lhs: String, _ rhs: String) -> Bool {
+    lhs.compare(rhs, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
   }
 }
 
@@ -58,6 +290,7 @@ final class AppEnvironment {
   let completionStore: DesktopCompletionStore
   let alertCoordinator: CompletionAlertCoordinator
   let systemIntegrationService: SystemIntegrationService
+  let alertSuppressionRuleStore: AlertSuppressionRuleStore
 
   private(set) var hookInspection = HookInstallationInspection(
     isInstalled: false,
@@ -85,6 +318,9 @@ final class AppEnvironment {
   @ObservationIgnored private var spoolPollingTask: Task<Void, Never>?
   @ObservationIgnored private var alertDeliveryTasks: [String: Task<Void, Never>] = [:]
   @ObservationIgnored private var alertDeliveryGenerations: [String: UUID] = [:]
+  @ObservationIgnored private var codexReturnTargets: [String: CodexReturnTarget] = [:]
+  @ObservationIgnored private var codexReturnTargetSessionOrder: [String] = []
+  @ObservationIgnored private var pendingCodexReturnTargetEventIDs: Set<UUID> = []
   @ObservationIgnored private var didStart = false
   #if DEBUG
     @ObservationIgnored private let isUITest: Bool
@@ -102,6 +338,16 @@ final class AppEnvironment {
     self.localization = localization
     completionStore = DesktopCompletionStore()
     #if DEBUG
+      let suppressionRulesURL =
+        isUITest
+        ? FileManager.default.temporaryDirectory
+          .appendingPathComponent(
+            "CodexDoneUITest-\(ProcessInfo.processInfo.processIdentifier)",
+            isDirectory: true
+          )
+          .appendingPathComponent("alert-suppression-rules.json")
+        : HookRuntimePaths.alertSuppressionRulesURL
+      alertSuppressionRuleStore = AlertSuppressionRuleStore(fileURL: suppressionRulesURL)
       let overlayAppearanceService =
         isUITest
         ? OverlayAppearanceService(
@@ -114,6 +360,7 @@ final class AppEnvironment {
         )
         : nil
     #else
+      alertSuppressionRuleStore = AlertSuppressionRuleStore()
       let overlayAppearanceService: OverlayAppearanceService? = nil
     #endif
     alertCoordinator = CompletionAlertCoordinator(
@@ -152,13 +399,47 @@ final class AppEnvironment {
     }
     alertCoordinator.notificationService.onNotificationOpened = { [weak self] recordID in
       Task { @MainActor in
-        _ = recordID
-        self?.openCodex()
+        self?.openCodex(recordID: recordID)
       }
     }
+    alertCoordinator.setVisualAlertOpenCodexActions(
+      hud: { [weak self] sessionID in
+        guard let self else { return }
+        if let sessionID {
+          let unreadRecordID = self.completionStore.unreadRecords.first {
+            $0.sessionID == sessionID
+          }?.id
+          HUDAlertClickAction.perform(
+            sessionID: sessionID,
+            unreadRecordID: unreadRecordID,
+            acknowledgeRecord: { self.completionStore.acknowledge(recordID: $0) },
+            returnToCodex: { self.returnToCodex(sessionID: $0) }
+          )
+        } else {
+          self.openCodex()
+        }
+      },
+      notch: { [weak self] requestedSessionID, acknowledgesAll in
+        guard let self else { return }
+        let latestUnreadSessionID = self.completionStore.unreadRecords.first?.sessionID
+        let returnSessionID = requestedSessionID ?? latestUnreadSessionID
+        NotchAlertClickAction.perform(
+          requestedSessionID: requestedSessionID,
+          latestUnreadSessionID: latestUnreadSessionID,
+          acknowledgesAll: acknowledgesAll,
+          opensCodex: self.canOpenCodex(sessionID: returnSessionID),
+          acknowledgeAll: { self.completionStore.acknowledgeAll() },
+          returnToCodex: { self.returnToCodex(sessionID: $0) }
+        )
+      },
+      canOpenCodex: { [weak self] sessionID in
+        self?.canOpenCodex(sessionID: sessionID) ?? false
+      }
+    )
   }
 
   var menuBarTitle: String { completionStore.menuBarTitle }
+  var canOpenLatestCodex: Bool { canOpenCodex(sessionID: nil) }
   var soundService: CompletionSoundService { alertCoordinator.soundService }
   var overlayAppearanceService: OverlayAppearanceService {
     alertCoordinator.overlayAppearanceService
@@ -189,11 +470,14 @@ final class AppEnvironment {
   }
 
   var hookConnectionIsReady: Bool {
-    hookInspection.isInstalled && hookStatusInspection.allRequiredHooksAreReady
+    hookInspection.isInstalled
+      && !hookInspection.helperRequiresUpdate
+      && hookStatusInspection.allRequiredHooksAreReady
   }
 
   var hookConnectionStatusTitle: String {
     guard hookInspection.isInstalled else { return L10n.text("未安装") }
+    if hookInspection.helperRequiresUpdate { return L10n.text("需要更新 Hooks") }
     if isHookStatusRefreshing, hookStatusInspection.availability == .notChecked {
       return L10n.text("正在检查")
     }
@@ -225,6 +509,7 @@ final class AppEnvironment {
 
   func hookDisplayState(for eventName: DesktopHookEventName) -> HookDisplayState {
     guard hookInspection.isInstalled else { return .notInstalled }
+    if hookInspection.helperRequiresUpdate { return .outdated }
     switch hookStatusInspection.availability {
     case .available:
       guard let status = hookStatusInspection.status(for: eventName) else { return .missing }
@@ -265,7 +550,11 @@ final class AppEnvironment {
         let simulateHooksUninstalled = ProcessInfo.processInfo.arguments.contains(
           "--ui-test-hooks-uninstalled"
         )
-        let hooksAreInstalled = !showInitializationGuide && !simulateHooksUninstalled
+        let simulateHooksOutdated = ProcessInfo.processInfo.arguments.contains(
+          "--ui-test-hooks-outdated"
+        )
+        let hooksAreInstalled =
+          simulateHooksOutdated || (!showInitializationGuide && !simulateHooksUninstalled)
         let multipleRecords = ProcessInfo.processInfo.arguments.contains(
           "--ui-test-multiple-records"
         )
@@ -278,6 +567,7 @@ final class AppEnvironment {
         hookInspection = HookInstallationInspection(
           isInstalled: hooksAreInstalled,
           helperIsExecutable: true,
+          helperRequiresUpdate: simulateHooksOutdated,
           configurationPath: "UI Test",
           detail: hooksAreInstalled
             ? L10n.text("UI 测试模拟已安装")
@@ -445,8 +735,41 @@ final class AppEnvironment {
     )
   }
 
-  func openCodex() {
-    _ = systemIntegrationService.openCodexApplication()
+  func openCodex(recordID: String? = nil) {
+    let sessionID: String?
+    if let recordID {
+      sessionID = completionStore.records.first(where: { $0.id == recordID })?.sessionID
+    } else {
+      sessionID = completionStore.unreadRecords.first?.sessionID
+    }
+    guard canOpenCodex(sessionID: sessionID) else { return }
+    returnToCodex(sessionID: sessionID)
+  }
+
+  func blockSimilarSubmittedMessages(for record: ConversationCompletionRecord) {
+    guard var keyword = record.conversationTitle else { return }
+    if keyword.hasSuffix("…") {
+      keyword.removeLast()
+    }
+    guard alertSuppressionRuleStore.addSubmittedMessageKeyword(keyword) else { return }
+    completionStore.acknowledge(recordID: record.id)
+  }
+
+  func blockProject(for record: ConversationCompletionRecord) {
+    guard alertSuppressionRuleStore.addProjectName(record.projectDisplayName) else { return }
+    completionStore.acknowledge(recordID: record.id)
+  }
+
+  private func returnToCodex(sessionID: String?) {
+    let target = sessionID.flatMap { codexReturnTargets[$0] }
+    guard SystemIntegrationService.canReturnToCodex(target) else { return }
+    _ = systemIntegrationService.returnToCodex(target)
+  }
+
+  private func canOpenCodex(sessionID: String?) -> Bool {
+    let resolvedSessionID = sessionID ?? completionStore.unreadRecords.first?.sessionID
+    let target = resolvedSessionID.flatMap { codexReturnTargets[$0] }
+    return SystemIntegrationService.canReturnToCodex(target)
   }
 
   func importCustomSound(from url: URL) {
@@ -581,9 +904,11 @@ final class AppEnvironment {
       while !Task.isCancelled {
         guard let self else { return }
         _ = await self.spoolConsumer.drain { [weak self] event in
-          await self?.consumeSpoolEvent(
+          let deliveryMode = HookEventDeliveryMode.startupMode(for: event)
+          return await self?.consumeSpoolEvent(
             event,
-            deliveryMode: .startupMode(for: event)
+            deliveryMode: deliveryMode,
+            capturesReturnTarget: deliveryMode == .live
           ) ?? false
         }
         self.spoolCount = await self.spoolConsumer.pendingCount()
@@ -594,22 +919,76 @@ final class AppEnvironment {
 
   private func consumeSpoolEvent(
     _ event: DesktopCompletionHookEvent,
-    deliveryMode: HookEventDeliveryMode
+    deliveryMode: HookEventDeliveryMode,
+    capturesReturnTarget: Bool = false
   ) async -> Bool {
     AppLog.hooks.notice("A spooled Desktop hook event was consumed")
-    return await completionStore.handlePersisting(
+    let target =
+      capturesReturnTarget
+      ? returnTarget(for: event, maximumAge: 3)
+      : nil
+    let didPersist = await completionStore.handlePersisting(
       event,
       deliveryMode: deliveryMode,
       ingress: .spool
     )
+    pendingCodexReturnTargetEventIDs.remove(event.eventID)
+    if didPersist, let target {
+      remember(target, for: event)
+    }
+    return didPersist
   }
 
   private func consumeSocketEvent(_ event: DesktopCompletionHookEvent) async -> Bool {
     AppLog.hooks.notice("A live Desktop hook event was received")
-    return await completionStore.handlePersisting(
+    let target = returnTarget(for: event)
+    let didPersist = await completionStore.handlePersisting(
       event,
       deliveryMode: .live,
       ingress: .socket
     )
+    pendingCodexReturnTargetEventIDs.remove(event.eventID)
+    if didPersist, let target {
+      remember(target, for: event)
+    }
+    return didPersist
+  }
+
+  private func returnTarget(
+    for event: DesktopCompletionHookEvent,
+    maximumAge: TimeInterval? = nil
+  ) -> CodexReturnTarget? {
+    if let maximumAge {
+      let age = max(0, Date.now.timeIntervalSince(event.receivedAt))
+      guard age <= maximumAge else { return nil }
+    }
+    guard
+      event.eventName == .userPromptSubmit,
+      !completionStore.hasProcessedEventID(event.eventID),
+      !pendingCodexReturnTargetEventIDs.contains(event.eventID),
+      let target = systemIntegrationService.captureCodexReturnTarget()
+    else {
+      return nil
+    }
+    pendingCodexReturnTargetEventIDs.insert(event.eventID)
+    return target
+  }
+
+  private func remember(_ target: CodexReturnTarget, for event: DesktopCompletionHookEvent) {
+    guard
+      let session = completionStore.sessions[event.sessionID],
+      session.phase == .running,
+      session.turnID == event.turnID,
+      session.lastEventAt == event.receivedAt
+    else {
+      return
+    }
+    codexReturnTargets[event.sessionID] = target
+    codexReturnTargetSessionOrder.removeAll(where: { $0 == event.sessionID })
+    codexReturnTargetSessionOrder.append(event.sessionID)
+    while codexReturnTargetSessionOrder.count > CompletionPersistence.maximumSessions {
+      let expiredSessionID = codexReturnTargetSessionOrder.removeFirst()
+      codexReturnTargets.removeValue(forKey: expiredSessionID)
+    }
   }
 }

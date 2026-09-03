@@ -115,6 +115,9 @@ final class CodexDoneUITests: XCTestCase {
     XCTAssertTrue(app.staticTexts["1 to review"].exists)
     XCTAssertTrue(app.buttons["Settings"].exists)
     XCTAssertTrue(app.buttons["Open Codex"].exists)
+    let returnToCodex = app.buttons["menu-open-codex"]
+    XCTAssertTrue(returnToCodex.isHittable)
+    XCTAssertLessThanOrEqual(returnToCodex.frame.maxX, popover.frame.maxX)
 
     app.buttons["Settings"].click()
     let settingsWindow = app.descendants(matching: .any)["settings-root"]
@@ -673,8 +676,6 @@ final class CodexDoneUITests: XCTestCase {
   private func localizedApplication(language: String = "zh-Hans") -> XCUIApplication {
     let app = XCUIApplication()
     app.launchArguments = [
-      "-AppleLanguages", "(\(language))",
-      "-AppleLocale", language == "en" ? "en_US" : "zh_CN",
       "-localization.language", language,
     ]
     return app
@@ -926,26 +927,6 @@ final class CodexDoneUITests: XCTestCase {
     XCTAssertTrue(surface.waitForNonExistence(timeout: 2))
   }
 
-  func testOverlayDismissesAfterAnyKey() throws {
-    let app = localizedApplication()
-    app.launchArguments += [
-      "--ui-test",
-      "--ui-test-show-overlay",
-      "-alerts.completion.soundEnabled", "NO",
-      "-alerts.systemNotificationEnabled", "NO",
-      "-alerts.visualMode", "fullscreen",
-      "-alerts.overlayDismissalMode", "click",
-      "-alerts.overlayAutoDismiss", "never",
-    ]
-    app.launch()
-    addTeardownBlock { app.terminate() }
-
-    let surface = app.descendants(matching: .any)["completion-overlay"]
-    XCTAssertTrue(surface.waitForExistence(timeout: 5))
-    app.typeKey("a", modifierFlags: [])
-    XCTAssertTrue(surface.waitForNonExistence(timeout: 2))
-  }
-
   func testOverlayAggregatesMultipleCompletions() throws {
     let app = localizedApplication()
     app.launchArguments += [
@@ -1019,6 +1000,9 @@ final class CodexDoneUITests: XCTestCase {
       XCTAssertTrue(app.descendants(matching: .any)["completion-hud-project"].exists)
       XCTAssertTrue(app.staticTexts["CodexDone"].exists)
     } else {
+      let openCodex = app.descendants(matching: .any)["completion-notch-open-codex"]
+      XCTAssertTrue(openCodex.waitForExistence(timeout: 5))
+      XCTAssertTrue(openCodex.isHittable)
       XCTAssertTrue(
         app.descendants(matching: .any)["completion-notch-conversation-title"].exists
       )

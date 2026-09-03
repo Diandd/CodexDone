@@ -12,7 +12,7 @@
   <strong>English</strong> · <a href="README.zh-CN.md">简体中文</a>
 </p>
 
-CodexDone connects to the official Codex Desktop Hooks and keeps stopped turns ready for review in the menu bar.
+CodexDone connects to the official Codex Hooks in Desktop or CLI and keeps stopped turns ready for review in the menu bar.
 
 Check your phone, grab a drink, or work on something else—there is no need to keep switching back to see whether Codex has stopped. CodexDone will let you know when it is time to return.
 
@@ -22,6 +22,7 @@ Check your phone, grab a drink, or work on something else—there is no need to 
 - Multiple visual alert styles with multi-display placement
 - System notifications and built-in or custom alert sounds
 - Custom alert headlines and full-screen appearance
+- Optional blocking rules for submitted-message keywords and regular expressions, assistant-reply regular expressions, and projects
 
 ## Screenshots
 
@@ -46,7 +47,7 @@ Check your phone, grab a drink, or work on something else—there is no need to 
 ## Environment
 
 - Currently developed and tested on macOS 27
-- ChatGPT Desktop with Codex Hooks support
+- Codex Desktop or CLI with Hooks support
 - Xcode 27 when building from source
 
 ## Run from source
@@ -58,7 +59,7 @@ Check your phone, grab a drink, or work on something else—there is no need to 
 On first launch:
 
 1. Install Hooks from the onboarding window or **Settings → General**.
-2. Open **ChatGPT Settings → Hooks → User Configuration**.
+2. In Desktop, open **ChatGPT Settings → Hooks → User Configuration**; in CLI, enter `/hooks`.
 3. Trust and enable `UserPromptSubmit` and `Stop`.
 
 ## Development

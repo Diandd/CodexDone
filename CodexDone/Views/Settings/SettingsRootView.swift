@@ -31,6 +31,7 @@ struct SettingsRootView: View {
         switch selection {
         case .general: GeneralSettingsView()
         case .alerts: AlertSettingsView()
+        case .suppression: AlertSuppressionSettingsView()
         case .diagnostics:
           PrivacyAndDiagnosticsSettingsView(
             presentInitializationGuide: presentInitializationGuide
@@ -87,6 +88,7 @@ private final class SettingsWindowObservationView: NSView {
 private enum SettingsSection: String, CaseIterable, Identifiable {
   case general
   case alerts
+  case suppression
   case diagnostics
   case about
 
@@ -96,6 +98,7 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
     switch self {
     case .general: L10n.text("常规")
     case .alerts: L10n.text("提醒")
+    case .suppression: L10n.text("屏蔽")
     case .diagnostics: L10n.text("隐私与诊断")
     case .about: L10n.text("关于")
     }
@@ -105,8 +108,208 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
     switch self {
     case .general: "gearshape"
     case .alerts: "bell"
+    case .suppression: "bell.slash"
     case .diagnostics: "hand.raised"
     case .about: "info.circle"
+    }
+  }
+}
+
+private struct AlertSuppressionSettingsView: View {
+  @Environment(AppEnvironment.self) private var environment
+  @State private var submittedKeywordDraft = ""
+  @State private var submittedRegexDraft = ""
+  @State private var assistantReplyRegexDraft = ""
+  @State private var projectDraft = ""
+
+  var body: some View {
+    Form {
+      Section {
+        ruleSubheading("关键词")
+        HStack {
+          TextField("输入发送关键词", text: $submittedKeywordDraft)
+            .textFieldStyle(.roundedBorder)
+            .onSubmit(addSubmittedKeyword)
+            .accessibilityIdentifier("settings-block-keyword-input")
+          Button("添加") { addSubmittedKeyword() }
+            .disabled(
+              AlertSuppressionRules.normalizedKeywordRule(submittedKeywordDraft) == nil
+            )
+            .accessibilityIdentifier("settings-block-keyword-add")
+        }
+
+        if environment.alertSuppressionRuleStore.submittedMessageKeywords.isEmpty {
+          Text("尚未添加发送关键词")
+            .foregroundStyle(.secondary)
+        } else {
+          ForEach(
+            environment.alertSuppressionRuleStore.submittedMessageKeywords,
+            id: \.self
+          ) { keyword in
+            ruleRow(keyword) {
+              environment.alertSuppressionRuleStore.removeSubmittedMessageKeyword(keyword)
+            }
+          }
+        }
+
+        Divider()
+        ruleSubheading("正则表达式")
+        HStack {
+          TextField("输入发送正则", text: $submittedRegexDraft)
+            .textFieldStyle(.roundedBorder)
+            .onSubmit(addSubmittedRegex)
+            .accessibilityIdentifier("settings-block-regex-input")
+          Button("添加") { addSubmittedRegex() }
+            .disabled(
+              AlertSuppressionRules.normalizedRegexRule(submittedRegexDraft) == nil
+            )
+            .accessibilityIdentifier("settings-block-regex-add")
+        }
+
+        if environment.alertSuppressionRuleStore.submittedMessageRegexPatterns.isEmpty {
+          Text("尚未添加发送正则")
+            .foregroundStyle(.secondary)
+        } else {
+          ForEach(
+            environment.alertSuppressionRuleStore.submittedMessageRegexPatterns,
+            id: \.self
+          ) { pattern in
+            ruleRow(pattern) {
+              environment.alertSuppressionRuleStore.removeSubmittedMessageRegex(pattern)
+            }
+          }
+        }
+      } header: {
+        Text("发送内容")
+      } footer: {
+        Text("发送内容在 UserPromptSubmit 时匹配；关键词忽略大小写和连续空白，正则默认区分大小写")
+      }
+
+      Section {
+        HStack {
+          TextField("输入回复正则", text: $assistantReplyRegexDraft)
+            .textFieldStyle(.roundedBorder)
+            .onSubmit(addAssistantReplyRegex)
+            .accessibilityIdentifier("settings-block-reply-regex-input")
+          Button("添加") { addAssistantReplyRegex() }
+            .disabled(
+              AlertSuppressionRules.normalizedRegexRule(assistantReplyRegexDraft) == nil
+            )
+            .accessibilityIdentifier("settings-block-reply-regex-add")
+        }
+
+        if environment.alertSuppressionRuleStore.assistantReplyRegexPatterns.isEmpty {
+          Text("尚未添加回复正则")
+            .foregroundStyle(.secondary)
+        } else {
+          ForEach(
+            environment.alertSuppressionRuleStore.assistantReplyRegexPatterns,
+            id: \.self
+          ) { pattern in
+            ruleRow(pattern) {
+              environment.alertSuppressionRuleStore.removeAssistantReplyRegex(pattern)
+            }
+          }
+        }
+      } header: {
+        Text("回复内容")
+      } footer: {
+        Text("正则匹配 Stop 提供的完整回复，默认区分大小写；无效表达式不会保存")
+      }
+
+      Section {
+        HStack {
+          TextField("输入项目名称", text: $projectDraft)
+            .textFieldStyle(.roundedBorder)
+            .onSubmit(addProject)
+            .accessibilityIdentifier("settings-block-project-input")
+          Button("添加") { addProject() }
+            .disabled(AlertSuppressionRules.normalizedRule(projectDraft) == nil)
+            .accessibilityIdentifier("settings-block-project-add")
+        }
+
+        if environment.alertSuppressionRuleStore.projectNames.isEmpty {
+          Text("尚未添加项目")
+            .foregroundStyle(.secondary)
+        } else {
+          ForEach(environment.alertSuppressionRuleStore.projectNames, id: \.self) {
+            projectName in
+            ruleRow(projectName) {
+              environment.alertSuppressionRuleStore.removeProjectName(projectName)
+            }
+          }
+        }
+      } header: {
+        Text("项目")
+      } footer: {
+        Text("项目名称按工作目录的最后一级名称精确匹配，不区分大小写")
+      }
+
+      if let message = environment.alertSuppressionRuleStore.operationMessage {
+        Section {
+          Label(message, systemImage: "exclamationmark.triangle.fill")
+            .foregroundStyle(.orange)
+            .accessibilityIdentifier("settings-block-operation-message")
+        }
+      }
+    }
+    .formStyle(.grouped)
+    .contentMargins(
+      .horizontal,
+      SettingsDetailLayout.horizontalContentMargin,
+      for: .scrollContent
+    )
+    .accessibilityElement(children: .contain)
+    .accessibilityIdentifier("settings-suppression-root")
+  }
+
+  private func ruleRow(_ value: String, onDelete: @escaping () -> Void) -> some View {
+    HStack {
+      Text(value)
+        .lineLimit(1)
+        .privacySensitive()
+      Spacer()
+      Button(role: .destructive, action: onDelete) {
+        Image(systemName: "trash")
+      }
+      .buttonStyle(.borderless)
+      .help("删除规则")
+      .accessibilityLabel("删除规则")
+    }
+  }
+
+  private func ruleSubheading(_ title: LocalizedStringKey) -> some View {
+    Text(title)
+      .font(.subheadline.weight(.semibold))
+  }
+
+  private func addSubmittedKeyword() {
+    if environment.alertSuppressionRuleStore.addSubmittedMessageKeyword(
+      submittedKeywordDraft
+    ) {
+      submittedKeywordDraft = ""
+    }
+  }
+
+  private func addProject() {
+    if environment.alertSuppressionRuleStore.addProjectName(projectDraft) {
+      projectDraft = ""
+    }
+  }
+
+  private func addSubmittedRegex() {
+    if environment.alertSuppressionRuleStore.addSubmittedMessageRegex(
+      submittedRegexDraft
+    ) {
+      submittedRegexDraft = ""
+    }
+  }
+
+  private func addAssistantReplyRegex() {
+    if environment.alertSuppressionRuleStore.addAssistantReplyRegex(
+      assistantReplyRegexDraft
+    ) {
+      assistantReplyRegexDraft = ""
     }
   }
 }

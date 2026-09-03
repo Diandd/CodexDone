@@ -19,8 +19,7 @@ struct HookBridgeProcessTests: Sendable {
       spool: spool,
       input: Data(
         ###"{"hook_event_name":"UserPromptSubmit","session_id":"s","turn_id":"t1","cwd":"/tmp/Safe","prompt":"## My request:\n# 修复菜单信息层级","transcript_path":"/private/secret.jsonl"}"###.utf8
-      ),
-      disableWake: true
+      )
     )
     #expect(promptOutput.isEmpty)
     let stopOutput = try run(
@@ -29,8 +28,7 @@ struct HookBridgeProcessTests: Sendable {
       spool: spool,
       input: Data(
         #"{"hook_event_name":"Stop","session_id":"s","turn_id":"t1","cwd":"/tmp/Safe","last_assistant_message":"已完成菜单布局并保留项目说明。","transcript_path":"/private/secret.jsonl"}"#.utf8
-      ),
-      disableWake: true
+      )
     )
     #expect(stopOutput == #"{"continue":true}"#)
 
@@ -89,12 +87,133 @@ struct HookBridgeProcessTests: Sendable {
       helper: try helperURL(),
       root: root,
       spool: spool,
-      input: input,
-      disableWake: true
+      input: input
     )
 
     #expect(output == #"{"continue":true}"#)
     #expect(try jsonFiles(in: spool).isEmpty)
+  }
+
+  @Test("真实 Bridge 匹配发送与回复规则且只输出屏蔽布尔值")
+  func bridgeReadsSuppressionRulesWithoutLeakingRuleText() throws {
+    let root = try makeTemporaryRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let spool = root.appendingPathComponent("spool")
+    let rulesURL = root.appendingPathComponent("rules.json")
+    let privateKeyword = "DO-NOT-ALERT-PRIVATE"
+    let privateRegex = #"DO-NOT-(?:ALERT|NOTIFY)-REGEX"#
+    let privateReplyRegex = #"FINAL-(?:ANSWER|REPLY)-MUTED"#
+    try AlertSuppressionRulesFile.save(
+      AlertSuppressionRules(
+        submittedMessageKeywords: [privateKeyword],
+        submittedMessageRegexPatterns: [privateRegex],
+        assistantReplyRegexPatterns: [privateReplyRegex]
+      ),
+      to: rulesURL
+    )
+    let longPrefix = String(repeating: "前", count: 35)
+
+    let output = try run(
+      helper: try helperURL(),
+      root: root,
+      spool: spool,
+      suppressionRulesURL: rulesURL,
+      input: Data(
+        """
+        {"hook_event_name":"UserPromptSubmit","session_id":"blocked","turn_id":"t1","cwd":"/tmp/Safe","prompt":"## My request:\\n\(longPrefix) \(privateKeyword)"}
+        """.utf8
+      )
+    )
+
+    #expect(output.isEmpty)
+    let file = try #require(try jsonFiles(in: spool).first)
+    let data = try Data(contentsOf: file)
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .millisecondsSince1970
+    let event = try decoder.decode(DesktopCompletionHookEvent.self, from: data)
+    #expect(event.suppressedByRule)
+    #expect(!String(decoding: data, as: UTF8.self).contains(privateKeyword))
+
+    let regexOutput = try run(
+      helper: try helperURL(),
+      root: root,
+      spool: spool,
+      suppressionRulesURL: rulesURL,
+      input: Data(
+        """
+        {"hook_event_name":"UserPromptSubmit","session_id":"blocked-regex","turn_id":"t2","cwd":"/tmp/Safe","prompt":"## My request:\\nDO-NOT-NOTIFY-REGEX"}
+        """.utf8
+      )
+    )
+    #expect(regexOutput.isEmpty)
+    let regexFile = try #require(
+      try jsonFiles(in: spool).first(where: { $0 != file })
+    )
+    let regexData = try Data(contentsOf: regexFile)
+    let regexEvent = try decoder.decode(DesktopCompletionHookEvent.self, from: regexData)
+    #expect(regexEvent.suppressedByRule)
+    #expect(!String(decoding: regexData, as: UTF8.self).contains(privateRegex))
+
+    let replyOutput = try run(
+      helper: try helperURL(),
+      root: root,
+      spool: spool,
+      suppressionRulesURL: rulesURL,
+      input: Data(
+        """
+        {"hook_event_name":"Stop","session_id":"blocked-reply","turn_id":"t3","cwd":"/tmp/Safe","last_assistant_message":"The FINAL-REPLY-MUTED response is ready"}
+        """.utf8
+      )
+    )
+    #expect(replyOutput == #"{"continue":true}"#)
+    let replyFile = try #require(
+      try jsonFiles(in: spool).first(where: { $0 != file && $0 != regexFile })
+    )
+    let replyData = try Data(contentsOf: replyFile)
+    let replyEvent = try decoder.decode(DesktopCompletionHookEvent.self, from: replyData)
+    #expect(replyEvent.suppressedByRule)
+    #expect(!String(decoding: replyData, as: UTF8.self).contains(privateReplyRegex))
+  }
+
+  @Test("真实 Bridge 在规则文件缺失时应用可见默认屏蔽项")
+  func bridgeUsesProductDefaultsWhenRulesFileIsMissing() throws {
+    let root = try makeTemporaryRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let spool = root.appendingPathComponent("spool")
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .millisecondsSince1970
+
+    let promptOutput = try run(
+      helper: try helperURL(),
+      root: root,
+      spool: spool,
+      input: Data(
+        #"{"hook_event_name":"UserPromptSubmit","session_id":"internal-root","turn_id":"t1","cwd":"/","prompt":"internal request"}"#.utf8
+      )
+    )
+    #expect(promptOutput.isEmpty)
+    let promptFile = try #require(try jsonFiles(in: spool).first)
+    let promptEvent = try decoder.decode(
+      DesktopCompletionHookEvent.self,
+      from: Data(contentsOf: promptFile)
+    )
+    #expect(promptEvent.suppressedByRule)
+
+    let stopOutput = try run(
+      helper: try helperURL(),
+      root: root,
+      spool: spool,
+      input: Data(
+        #"{"hook_event_name":"Stop","session_id":"internal-suggestions","turn_id":"t2","cwd":"/tmp/CodexDone","last_assistant_message":"{\"suggestions\":[{\"title\":\"internal\",\"description\":\"fixture\"}]}"}"#.utf8
+      )
+    )
+    #expect(stopOutput == #"{"continue":true}"#)
+    let stopFile = try #require(try jsonFiles(in: spool).first(where: { $0 != promptFile }))
+    let stopEvent = try decoder.decode(
+      DesktopCompletionHookEvent.self,
+      from: Data(contentsOf: stopFile)
+    )
+    #expect(stopEvent.suppressedByRule)
   }
 
   @Test("真实 Socket 只有收到 0x06 ACK 才跳过 Spool")
@@ -115,8 +234,7 @@ struct HookBridgeProcessTests: Sendable {
       socketURL: socketURL,
       input: Data(
         ###"{"hook_event_name":"UserPromptSubmit","session_id":"socket-session","turn_id":"t1","prompt":"## My request:\n修复菜单信息层级"}"###.utf8
-      ),
-      disableWake: true
+      )
     )
     let receivedData = try #require(server.waitForPayload())
     let decoder = JSONDecoder()
@@ -154,8 +272,7 @@ struct HookBridgeProcessTests: Sendable {
           """
           {"hook_event_name":"Stop","session_id":"fallback-\(index)","turn_id":"t1"}
           """.utf8
-        ),
-        disableWake: true
+        )
       )
 
       #expect(output == #"{"continue":true}"#)
@@ -164,76 +281,56 @@ struct HookBridgeProcessTests: Sendable {
     }
   }
 
-  @Test("Debug 唤醒等待 marker 并跨进程执行三十秒冷却")
-  func debugWakeWaitsAndAppliesCooldown() throws {
-    #if DEBUG
-      let root = try makeTemporaryRoot()
-      defer { try? FileManager.default.removeItem(at: root) }
-      let spool = root.appendingPathComponent("spool")
-      let wakeMarker = root.appendingPathComponent("wake-marker.txt")
-      let wakeExecutable = root.appendingPathComponent("wake-test.sh")
-      let wakeScript = """
-        #!/bin/sh
-        sleep 0.1
-        printf 'wake\\n' >> "$CODEXDONE_BRIDGE_WAKE_MARKER"
-        """
-      #expect(
-        FileManager.default.createFile(
-          atPath: wakeExecutable.path,
-          contents: Data(wakeScript.utf8),
-          attributes: [.posixPermissions: 0o700]
-        )
+  @Test("Socket 不可达只写 Spool，不启动主应用")
+  func socketFailureSpoolsWithoutLaunchingApplication() throws {
+    let root = try makeTemporaryRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let spool = root.appendingPathComponent("spool")
+    let launchMarker = root.appendingPathComponent("launch-marker.txt")
+    let legacyWakeExecutable = root.appendingPathComponent("legacy-wake-test.sh")
+    let wakeScript = """
+      #!/bin/sh
+      printf 'launched\\n' >> "$CODEXDONE_BRIDGE_WAKE_MARKER"
+      """
+    #expect(
+      FileManager.default.createFile(
+        atPath: legacyWakeExecutable.path,
+        contents: Data(wakeScript.utf8),
+        attributes: [.posixPermissions: 0o700]
       )
-      let helper = try helperURL()
+    )
+    let helper = try helperURL()
 
-      _ = try run(
-        helper: helper,
-        root: root,
-        spool: spool,
-        wakeExecutable: wakeExecutable,
-        wakeMarker: wakeMarker,
-        input: Data(
-          #"{"hook_event_name":"UserPromptSubmit","session_id":"wake","turn_id":"t1"}"#.utf8
-        )
+    let promptOutput = try run(
+      helper: helper,
+      root: root,
+      spool: spool,
+      legacyWakeExecutable: legacyWakeExecutable,
+      legacyWakeMarker: launchMarker,
+      input: Data(
+        #"{"hook_event_name":"UserPromptSubmit","session_id":"quit","turn_id":"t1"}"#.utf8
       )
-      #expect(try wakeLineCount(in: wakeMarker) == 1)
+    )
+    let stopOutput = try run(
+      helper: helper,
+      root: root,
+      spool: spool,
+      legacyWakeExecutable: legacyWakeExecutable,
+      legacyWakeMarker: launchMarker,
+      input: Data(
+        #"{"hook_event_name":"Stop","session_id":"quit","turn_id":"t1"}"#.utf8
+      )
+    )
 
-      _ = try run(
-        helper: helper,
-        root: root,
-        spool: spool,
-        wakeExecutable: wakeExecutable,
-        wakeMarker: wakeMarker,
-        input: Data(
-          #"{"hook_event_name":"Stop","session_id":"wake","turn_id":"t1"}"#.utf8
-        )
+    #expect(promptOutput.isEmpty)
+    #expect(stopOutput == #"{"continue":true}"#)
+    #expect(try jsonFiles(in: spool).count == 2)
+    #expect(!FileManager.default.fileExists(atPath: launchMarker.path))
+    #expect(
+      !FileManager.default.fileExists(
+        atPath: spool.appendingPathComponent(".wake-cooldown").path
       )
-      #expect(try wakeLineCount(in: wakeMarker) == 1)
-
-      let cooldownURL = spool.appendingPathComponent(".wake-cooldown")
-      let expiredTimestamp = Date().timeIntervalSince1970 - 31
-      try Data(String(expiredTimestamp).utf8).write(to: cooldownURL)
-      try FileManager.default.setAttributes(
-        [.posixPermissions: 0o600],
-        ofItemAtPath: cooldownURL.path
-      )
-      _ = try run(
-        helper: helper,
-        root: root,
-        spool: spool,
-        wakeExecutable: wakeExecutable,
-        wakeMarker: wakeMarker,
-        input: Data(
-          #"{"hook_event_name":"UserPromptSubmit","session_id":"wake","turn_id":"t2"}"#.utf8
-        )
-      )
-
-      #expect(try wakeLineCount(in: wakeMarker) == 2)
-      let cooldownMode = try FileManager.default.attributesOfItem(atPath: cooldownURL.path)[
-        .posixPermissions
-      ] as? NSNumber
-      #expect(cooldownMode?.intValue == 0o600)
-    #endif
+    )
   }
 
   @Test("真实 Helper 经正式 Socket 驱动 Store 完成并由下一 Prompt 清除")
@@ -265,8 +362,7 @@ struct HookBridgeProcessTests: Sendable {
         socketURL: socketURL,
         input: Data(
           #"{"hook_event_name":"UserPromptSubmit","session_id":"e2e-session","turn_id":"turn-1","cwd":"/tmp/Private","prompt":"验证菜单主题与回复预览"}"#.utf8
-        ),
-        disableWake: true
+        )
       )
     }.value
     #expect(promptOutput.isEmpty)
@@ -280,8 +376,7 @@ struct HookBridgeProcessTests: Sendable {
         socketURL: socketURL,
         input: Data(
           #"{"hook_event_name":"Stop","session_id":"e2e-session","turn_id":"turn-1","cwd":"/tmp/Private","last_assistant_message":"已生成用于端到端验证的回复预览。"}"#.utf8
-        ),
-        disableWake: true
+        )
       )
     }.value
     #expect(stopOutput == #"{"continue":true}"#)
@@ -301,8 +396,7 @@ struct HookBridgeProcessTests: Sendable {
         socketURL: socketURL,
         input: Data(
           #"{"hook_event_name":"UserPromptSubmit","session_id":"e2e-session","turn_id":"turn-2","cwd":"/tmp/Private","prompt":"验证下一轮自动清除"}"#.utf8
-        ),
-        disableWake: true
+        )
       )
     }.value
     #expect(nextPromptOutput.isEmpty)
@@ -336,21 +430,15 @@ struct HookBridgeProcessTests: Sendable {
     ).filter { $0.pathExtension == "json" }
   }
 
-  private func wakeLineCount(in markerURL: URL) throws -> Int {
-    try String(contentsOf: markerURL, encoding: .utf8)
-      .split(whereSeparator: \.isNewline)
-      .count
-  }
-
   private func run(
     helper: URL,
     root: URL,
     spool: URL,
     socketURL: URL? = nil,
-    wakeExecutable: URL? = nil,
-    wakeMarker: URL? = nil,
-    input: Data,
-    disableWake: Bool = false
+    suppressionRulesURL: URL? = nil,
+    legacyWakeExecutable: URL? = nil,
+    legacyWakeMarker: URL? = nil,
+    input: Data
   ) throws -> String {
     let process = Process()
     let inputPipe = Pipe()
@@ -362,12 +450,14 @@ struct HookBridgeProcessTests: Sendable {
       socketURL ?? root.appendingPathComponent("missing.sock")
     ).path
     environment["CODEXDONE_BRIDGE_SPOOL_DIR"] = spool.path
-    environment["CODEXDONE_BRIDGE_DISABLE_WAKE"] = disableWake ? "1" : "0"
-    if let wakeExecutable {
-      environment["CODEXDONE_BRIDGE_WAKE_EXECUTABLE"] = wakeExecutable.path
+    environment["CODEXDONE_BRIDGE_SUPPRESSION_RULES_PATH"] = (
+      suppressionRulesURL ?? root.appendingPathComponent("rules.json")
+    ).path
+    if let legacyWakeExecutable {
+      environment["CODEXDONE_BRIDGE_WAKE_EXECUTABLE"] = legacyWakeExecutable.path
     }
-    if let wakeMarker {
-      environment["CODEXDONE_BRIDGE_WAKE_MARKER"] = wakeMarker.path
+    if let legacyWakeMarker {
+      environment["CODEXDONE_BRIDGE_WAKE_MARKER"] = legacyWakeMarker.path
     }
     process.executableURL = helper
     process.environment = environment

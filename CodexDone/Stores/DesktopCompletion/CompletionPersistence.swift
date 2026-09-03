@@ -23,12 +23,17 @@ actor CompletionPersistence {
     }
     let data = try Data(contentsOf: fileURL)
     let envelope = try JSONDecoder().decode(StateVersionEnvelope.self, from: data)
-    guard envelope.version == CompletionPersistedState.currentVersion else {
-      return CompletionPersistedState()
-    }
     let decoder = JSONDecoder()
     decoder.dateDecodingStrategy = .millisecondsSince1970
-    let state = try decoder.decode(CompletionPersistedState.self, from: data)
+    let state: CompletionPersistedState
+    switch envelope.version {
+    case CompletionPersistedState.currentVersion:
+      state = try decoder.decode(CompletionPersistedState.self, from: data)
+    case ReleasedCompletionPersistedState.version:
+      state = try decoder.decode(ReleasedCompletionPersistedState.self, from: data).migrated()
+    default:
+      return CompletionPersistedState()
+    }
     return normalized(state)
   }
 
@@ -61,6 +66,7 @@ actor CompletionPersistence {
 
   private func normalized(_ state: CompletionPersistedState) -> CompletionPersistedState {
     var copy = state
+    copy.version = CompletionPersistedState.currentVersion
     copy.sessions = Array(
       state.sessions
         .map { session in
@@ -115,4 +121,51 @@ actor CompletionPersistence {
 
 private struct StateVersionEnvelope: Decodable {
   let version: Int
+}
+
+private struct ReleasedCompletionPersistedState: Decodable {
+  static let version = 5
+
+  let sessions: [ReleasedCompletionSessionState]
+  let records: [ConversationCompletionRecord]
+  let processedEventIDs: [UUID]
+  let hookEventDiagnostics: [HookEventDiagnosticRecord]
+  let lastUserPromptAt: Date?
+  let lastStopAt: Date?
+
+  func migrated() -> CompletionPersistedState {
+    CompletionPersistedState(
+      sessions: sessions.map { $0.migrated() },
+      records: records,
+      processedEventIDs: processedEventIDs,
+      hookEventDiagnostics: hookEventDiagnostics,
+      lastUserPromptAt: lastUserPromptAt,
+      lastStopAt: lastStopAt
+    )
+  }
+}
+
+private struct ReleasedCompletionSessionState: Decodable {
+  let sessionID: String
+  let phase: ConversationCompletionPhase
+  let turnID: String?
+  let projectDisplayName: String
+  let lastEventAt: Date
+  let pendingEventID: UUID?
+  let conversationTitle: String?
+  let replyPreview: String?
+
+  func migrated() -> CompletionSessionState {
+    CompletionSessionState(
+      sessionID: sessionID,
+      phase: phase,
+      turnID: turnID,
+      projectDisplayName: projectDisplayName,
+      lastEventAt: lastEventAt,
+      pendingEventID: pendingEventID,
+      conversationTitle: conversationTitle,
+      replyPreview: replyPreview,
+      suppressesCurrentTurn: false
+    )
+  }
 }

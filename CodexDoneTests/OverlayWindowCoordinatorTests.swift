@@ -287,6 +287,287 @@ final class OverlayWindowCoordinatorTests: XCTestCase {
     XCTAssertFalse(panel.hidesOnDeactivate)
     XCTAssertTrue(panel.collectionBehavior.contains(.canJoinAllSpaces))
     XCTAssertTrue(panel.collectionBehavior.contains(.fullScreenAuxiliary))
+
+    let expandedInteractionFrame = attached.interactionFrame(isExpanded: true)
+    let compactInteractionFrame = attached.interactionFrame(isExpanded: false)
+    XCTAssertEqual(expandedInteractionFrame.width, attached.expandedWidth)
+    XCTAssertEqual(expandedInteractionFrame.height, NotchAlertLayout.expandedHeight)
+    XCTAssertEqual(expandedInteractionFrame.maxY, screenFrame.maxY)
+    XCTAssertEqual(compactInteractionFrame.width, attached.compactWidth)
+    XCTAssertEqual(compactInteractionFrame.height, attached.compactHeight)
+    XCTAssertEqual(compactInteractionFrame.maxY, screenFrame.maxY)
+
+    let interactionPanel = NotchWindowCoordinator.makeInteractionPanel(
+      frame: compactInteractionFrame,
+      screen: nil
+    )
+    defer { interactionPanel.orderOut(nil) }
+    XCTAssertTrue(interactionPanel.styleMask.contains(.nonactivatingPanel))
+    XCTAssertFalse(interactionPanel.ignoresMouseEvents)
+    XCTAssertFalse(interactionPanel.acceptsMouseMovedEvents)
+    XCTAssertEqual(interactionPanel.frame, compactInteractionFrame)
+    XCTAssertLessThan(interactionPanel.frame.width, panel.frame.width)
+    XCTAssertLessThan(interactionPanel.frame.height, panel.frame.height)
+  }
+
+  func testNotchDismissalWaitsForExpandedCollapseBeforeFading() {
+    XCTAssertEqual(
+      NotchWindowCoordinator.dismissalFadeDelay(hasExpandedState: true),
+      NotchAlertMotion.springDuration
+    )
+    XCTAssertEqual(
+      NotchWindowCoordinator.dismissalFadeDelay(hasExpandedState: false),
+      0
+    )
+  }
+
+  func testNotchInteractionTracksHoverAndForwardsSession() throws {
+    var requestedSessionID: String?
+    var requestCount = 0
+    var hoverStates: [Bool] = []
+    let view = NotchInteractionView(
+      sessionID: "session-a",
+      acknowledgesAll: true,
+      onHoverChanged: { hoverStates.append($0) }
+    ) { sessionID, acknowledgesAll in
+      requestCount += 1
+      requestedSessionID = sessionID
+      XCTAssertTrue(acknowledgesAll)
+    }
+    view.frame = NSRect(x: 0, y: 0, width: 240, height: 80)
+    view.updateTrackingAreas()
+
+    XCTAssertTrue(view.acceptsFirstMouse(for: nil))
+    XCTAssertTrue(
+      view.trackingAreas.contains {
+        $0.options.contains(.mouseEnteredAndExited) && $0.options.contains(.activeAlways)
+      }
+    )
+    XCTAssertEqual(view.accessibilityRole(), .button)
+    XCTAssertEqual(view.accessibilityIdentifier(), "completion-notch-open-codex")
+    XCTAssertEqual(
+      view.accessibilityLabel(),
+      L10n.text("全部已查看并打开 Codex")
+    )
+    XCTAssertTrue(view.accessibilityPerformPress())
+    XCTAssertEqual(requestCount, 1)
+    XCTAssertEqual(requestedSessionID, "session-a")
+
+    let event = try XCTUnwrap(
+      NSEvent.mouseEvent(
+        with: .leftMouseUp,
+        location: NSPoint(x: 20, y: 20),
+        modifierFlags: [],
+        timestamp: 0,
+        windowNumber: 0,
+        context: nil,
+        eventNumber: 0,
+        clickCount: 1,
+        pressure: 0
+      )
+    )
+    view.mouseUp(with: event)
+    XCTAssertEqual(requestCount, 2)
+    XCTAssertEqual(requestedSessionID, "session-a")
+
+    view.opensCodex = false
+    XCTAssertTrue(view.isInteractionEnabled)
+    XCTAssertTrue(view.acceptsFirstMouse(for: nil))
+    XCTAssertEqual(view.accessibilityLabel(), L10n.text("全部已查看"))
+    XCTAssertTrue(view.accessibilityPerformPress())
+    XCTAssertEqual(requestCount, 3)
+
+    view.acknowledgesAll = false
+    XCTAssertFalse(view.isInteractionEnabled)
+    XCTAssertFalse(view.acceptsFirstMouse(for: nil))
+    XCTAssertFalse(view.accessibilityPerformPress())
+    view.mouseUp(with: event)
+    XCTAssertEqual(requestCount, 3)
+    view.mouseEntered(with: event)
+    XCTAssertFalse(view.isPointerInside)
+
+    view.opensCodex = true
+    view.mouseEntered(with: event)
+    XCTAssertTrue(view.isPointerInside)
+    view.cancelPointerInteraction()
+    XCTAssertFalse(view.isPointerInside)
+    XCTAssertEqual(hoverStates, [true, false])
+    XCTAssertGreaterThan(NotchAlertMotion.hoverScale, 1)
+    XCTAssertLessThan(NotchAlertMotion.hoverScale, 1.05)
+  }
+
+  func testHUDInteractionForwardsSession() throws {
+    var requestedSessionID: String?
+    var requestCount = 0
+    let view = HUDInteractionView(
+      sessionID: "session-hud"
+    ) { sessionID in
+      requestCount += 1
+      requestedSessionID = sessionID
+    }
+    view.frame = NSRect(x: 0, y: 0, width: 410, height: 82)
+    XCTAssertTrue(view.acceptsFirstMouse(for: nil))
+    XCTAssertEqual(view.accessibilityRole(), .button)
+    XCTAssertEqual(view.accessibilityIdentifier(), "completion-hud-open-codex")
+    XCTAssertTrue(view.accessibilityPerformPress())
+    XCTAssertEqual(requestCount, 1)
+    XCTAssertEqual(requestedSessionID, "session-hud")
+
+    let event = try XCTUnwrap(
+      NSEvent.mouseEvent(
+        with: .leftMouseUp,
+        location: NSPoint(x: 20, y: 20),
+        modifierFlags: [],
+        timestamp: 0,
+        windowNumber: 0,
+        context: nil,
+        eventNumber: 0,
+        clickCount: 1,
+        pressure: 0
+      )
+    )
+    view.mouseUp(with: event)
+    XCTAssertEqual(requestCount, 2)
+    XCTAssertEqual(requestedSessionID, "session-hud")
+
+    view.isOpenEnabled = false
+    XCTAssertFalse(view.acceptsFirstMouse(for: nil))
+    XCTAssertFalse(view.accessibilityPerformPress())
+    view.mouseUp(with: event)
+    XCTAssertEqual(requestCount, 2)
+
+  }
+
+  func testHUDCoordinatorForwardsOpenRequest() {
+    let coordinator = HUDWindowCoordinator(screensProvider: { [] })
+    var requestedSessionID: String?
+    coordinator.setOpenCodexAction { requestedSessionID = $0 }
+
+    coordinator.requestOpenCodex(sessionID: "session-hud")
+
+    XCTAssertEqual(requestedSessionID, "session-hud")
+  }
+
+  func testVisualCoordinatorKeepsHUDAndNotchActionsSeparate() {
+    let hudCoordinator = HUDWindowCoordinator(screensProvider: { [] })
+    let notchCoordinator = NotchWindowCoordinator(screensProvider: { [] })
+    let coordinator = CompletionAlertCoordinator(
+      hudCoordinator: hudCoordinator,
+      notchCoordinator: notchCoordinator
+    )
+    var actions: [String] = []
+    coordinator.setVisualAlertOpenCodexActions(
+      hud: { sessionID in actions.append("hud:\(sessionID ?? "nil")") },
+      notch: { sessionID, acknowledgesAll in
+        actions.append("notch:\(sessionID ?? "nil"):\(acknowledgesAll)")
+      },
+      canOpenCodex: { _ in true }
+    )
+
+    hudCoordinator.requestOpenCodex(sessionID: "session-hud")
+    notchCoordinator.requestOpenCodex(sessionID: "session-notch")
+
+    XCTAssertEqual(actions, ["hud:session-hud", "notch:session-notch:true"])
+  }
+
+  func testHUDClickAcknowledgesOnlyItsRecordBeforeReturning() {
+    var operations: [String] = []
+
+    HUDAlertClickAction.perform(
+      sessionID: "session-hud",
+      unreadRecordID: "record-hud",
+      acknowledgeRecord: { operations.append("acknowledge:\($0)") },
+      returnToCodex: { operations.append("return:\($0)") }
+    )
+
+    XCTAssertEqual(
+      operations,
+      ["acknowledge:record-hud", "return:session-hud"]
+    )
+
+    operations.removeAll()
+    HUDAlertClickAction.perform(
+      sessionID: "test-alert",
+      unreadRecordID: nil,
+      acknowledgeRecord: { operations.append("acknowledge:\($0)") },
+      returnToCodex: { operations.append("return:\($0)") }
+    )
+
+    XCTAssertEqual(operations, ["return:test-alert"])
+  }
+
+  func testNotchClickAcknowledgesAllBeforeReturningToCapturedSession() {
+    var operations: [String] = []
+    var returnedSessionID: String?
+
+    NotchAlertClickAction.perform(
+      requestedSessionID: nil,
+      latestUnreadSessionID: "session-latest",
+      acknowledgesAll: true,
+      opensCodex: true,
+      acknowledgeAll: { operations.append("acknowledge-all") },
+      returnToCodex: { sessionID in
+        operations.append("return")
+        returnedSessionID = sessionID
+      }
+    )
+
+    XCTAssertEqual(operations, ["acknowledge-all", "return"])
+    XCTAssertEqual(returnedSessionID, "session-latest")
+
+    NotchAlertClickAction.perform(
+      requestedSessionID: "session-expanded",
+      latestUnreadSessionID: "session-latest",
+      acknowledgesAll: true,
+      opensCodex: true,
+      acknowledgeAll: {},
+      returnToCodex: { returnedSessionID = $0 }
+    )
+    XCTAssertEqual(returnedSessionID, "session-expanded")
+
+    operations.removeAll()
+    returnedSessionID = nil
+    NotchAlertClickAction.perform(
+      requestedSessionID: "session-cli",
+      latestUnreadSessionID: "session-latest",
+      acknowledgesAll: true,
+      opensCodex: false,
+      acknowledgeAll: { operations.append("acknowledge-all") },
+      returnToCodex: { sessionID in
+        operations.append("return")
+        returnedSessionID = sessionID
+      }
+    )
+    XCTAssertEqual(operations, ["acknowledge-all"])
+    XCTAssertNil(returnedSessionID)
+
+    operations.removeAll()
+    NotchAlertClickAction.perform(
+      requestedSessionID: "test-alert",
+      latestUnreadSessionID: "session-latest",
+      acknowledgesAll: false,
+      opensCodex: true,
+      acknowledgeAll: { operations.append("acknowledge-all") },
+      returnToCodex: { _ in operations.append("return") }
+    )
+    XCTAssertEqual(operations, ["return"])
+  }
+
+  func testNotchCoordinatorForwardsExpandedAndCompactOpenRequests() {
+    let coordinator = NotchWindowCoordinator(screensProvider: { [] })
+    var requests: [(sessionID: String?, acknowledgesAll: Bool)] = []
+    coordinator.setOpenCodexAction { sessionID, acknowledgesAll in
+      requests.append((sessionID, acknowledgesAll))
+    }
+
+    coordinator.requestOpenCodex(sessionID: "session-a")
+    coordinator.requestOpenCodex(sessionID: nil)
+
+    XCTAssertEqual(requests.count, 2)
+    XCTAssertEqual(requests[0].sessionID, "session-a")
+    XCTAssertTrue(requests[0].acknowledgesAll)
+    XCTAssertNil(requests[1].sessionID)
+    XCTAssertTrue(requests[1].acknowledgesAll)
   }
 
   func testNotchUnreadIndicatorTracksOnlyRetainedSessionsUntilAcknowledged() {

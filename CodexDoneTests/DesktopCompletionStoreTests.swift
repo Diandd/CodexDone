@@ -20,6 +20,33 @@ struct DesktopCompletionStoreTests {
     #expect(projectedCounts == [2, 0])
   }
 
+  @Test("HUD 点击只确认对应会话并保留其他未读")
+  func hudClickAcknowledgesOnlyTheMatchingSession() async throws {
+    let fixture = try Fixture()
+    let store = DesktopCompletionStore(persistence: fixture.persistence)
+    await store.load()
+    store.injectUITestRecords(multipleSessions: true)
+    let sessionID = "ui-test-session-codexdone"
+    let recordID = try #require(
+      store.unreadRecords.first { $0.sessionID == sessionID }?.id
+    )
+    var returnedSessionID: String?
+
+    HUDAlertClickAction.perform(
+      sessionID: sessionID,
+      unreadRecordID: recordID,
+      acknowledgeRecord: { store.acknowledge(recordID: $0) },
+      returnToCodex: { returnedSessionID = $0 }
+    )
+
+    #expect(returnedSessionID == sessionID)
+    #expect(store.unreadCount == 1)
+    #expect(store.sessions[sessionID]?.phase == .idle)
+    #expect(store.sessions["ui-test-session-sprout"]?.phase == .readyToReview)
+    #expect(store.unreadRecords.first?.sessionID == "ui-test-session-sprout")
+    #expect(await store.flushPersistence())
+  }
+
   @Test("Stop 防抖后只提醒一次，重复事件被去重")
   func stopDebouncesAndDeduplicates() async throws {
     let fixture = try Fixture()
@@ -38,7 +65,9 @@ struct DesktopCompletionStoreTests {
       turn: "turn-1",
       replyPreview: "已完成菜单信息层级调整。"
     )
+    #expect(!store.hasProcessedEventID(prompt.eventID))
     await store.handlePersisting(prompt, deliveryMode: .live)
+    #expect(store.hasProcessedEventID(prompt.eventID))
     await store.handlePersisting(stop, deliveryMode: .live)
     await store.handlePersisting(stop, deliveryMode: .live)
 
@@ -155,6 +184,66 @@ struct DesktopCompletionStoreTests {
     #expect(store.hookEventDiagnostics.first?.ingress == .spool)
     #expect(store.hookEventDiagnostics.first?.payloadKind == .structuredText)
     #expect(store.hookEventDiagnostics.first?.outcome == .ignoredWithoutPrompt)
+  }
+
+  @Test("屏蔽的本轮不进入未读且诊断只记录通用结果")
+  func suppressedTurnDoesNotCreateUnreadRecord() async throws {
+    let fixture = try Fixture()
+    let store = DesktopCompletionStore(persistence: fixture.persistence)
+    await store.load()
+    var deliveredIDs: [String] = []
+    store.onReadyToReview = { deliveredIDs.append($0.id) }
+
+    await store.handlePersisting(
+      fixture.event(
+        .userPromptSubmit,
+        turn: "blocked-turn",
+        conversationTitle: "无需提醒",
+        suppressedByRule: true
+      ),
+      deliveryMode: .live
+    )
+    await store.handlePersisting(
+      fixture.event(.stop, turn: "blocked-turn", replyPreview: "已完成。"),
+      deliveryMode: .live
+    )
+
+    #expect(store.unreadCount == 0)
+    #expect(deliveredIDs.isEmpty)
+    #expect(store.sessions["session-1"]?.phase == .idle)
+    #expect(store.hookEventDiagnostics.first?.outcome == .suppressedByRule)
+  }
+
+  @Test("回复正则命中的 Stop 不进入未读且不投递提醒")
+  func suppressedStopReplyDoesNotCreateUnreadRecord() async throws {
+    let fixture = try Fixture()
+    let store = DesktopCompletionStore(persistence: fixture.persistence)
+    await store.load()
+    var deliveredIDs: [String] = []
+    store.onReadyToReview = { deliveredIDs.append($0.id) }
+
+    await store.handlePersisting(
+      fixture.event(
+        .userPromptSubmit,
+        turn: "reply-blocked-turn",
+        conversationTitle: "检查自动回复"
+      ),
+      deliveryMode: .live
+    )
+    await store.handlePersisting(
+      fixture.event(
+        .stop,
+        turn: "reply-blocked-turn",
+        replyPreview: "命中回复规则",
+        suppressedByRule: true
+      ),
+      deliveryMode: .live
+    )
+
+    #expect(store.unreadCount == 0)
+    #expect(deliveredIDs.isEmpty)
+    #expect(store.sessions["session-1"]?.phase == .idle)
+    #expect(store.hookEventDiagnostics.first?.outcome == .suppressedByRule)
   }
 
   @Test("诊断记录只保存事件元数据并跟踪防抖结果")
@@ -535,7 +624,8 @@ struct DesktopCompletionStoreTests {
       eventID: UUID = UUID(),
       workingDirectory: String = "/tmp/CodexDone",
       conversationTitle: String? = nil,
-      replyPreview: String? = nil
+      replyPreview: String? = nil,
+      suppressedByRule: Bool = false
     ) -> DesktopCompletionHookEvent {
       DesktopCompletionHookEvent(
         eventID: eventID,
@@ -545,6 +635,7 @@ struct DesktopCompletionStoreTests {
         workingDirectory: workingDirectory,
         conversationTitle: conversationTitle,
         replyPreview: replyPreview,
+        suppressedByRule: suppressedByRule,
         receivedAt: receivedAt
       )
     }

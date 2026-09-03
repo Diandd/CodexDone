@@ -84,11 +84,241 @@ struct HookPayloadSanitizerTests {
     #expect(!encoded.contains("transcript"))
   }
 
+  @Test("屏蔽规则在桥接侧匹配且事件只携带布尔结果")
+  func matchesSuppressionRulesWithoutTransmittingThem() throws {
+    let rules = AlertSuppressionRules(
+      submittedMessageKeywords: ["private marker"],
+      submittedMessageRegexPatterns: [#"(?i)build\s+failed"#],
+      assistantReplyRegexPatterns: [#"(?i)release\s+note:\s+skip alert"#],
+      projectNames: ["Muted  Project"]
+    )
+    let promptPayload = try JSONSerialization.data(
+      withJSONObject: [
+        "hook_event_name": "UserPromptSubmit",
+        "session_id": "blocked-message",
+        "turn_id": "turn-1",
+        "cwd": "/tmp/VisibleProject",
+        "prompt": "## My request:\nPlease handle this PRIVATE\nMARKER quietly",
+      ]
+    )
+    let projectPayload = try JSONSerialization.data(
+      withJSONObject: [
+        "hook_event_name": "Stop",
+        "session_id": "blocked-project",
+        "turn_id": "turn-1",
+        "cwd": "/tmp/muted  project",
+      ]
+    )
+    let regexPayload = try JSONSerialization.data(
+      withJSONObject: [
+        "hook_event_name": "UserPromptSubmit",
+        "session_id": "blocked-regex",
+        "turn_id": "turn-1",
+        "cwd": "/tmp/VisibleProject",
+        "prompt": "## My request:\nThe BUILD\nFAILED during packaging",
+      ]
+    )
+    let replyPayload = try JSONSerialization.data(
+      withJSONObject: [
+        "hook_event_name": "Stop",
+        "session_id": "blocked-reply",
+        "turn_id": "turn-1",
+        "cwd": "/tmp/VisibleProject",
+        "last_assistant_message": "Release note:\nSKIP ALERT",
+      ]
+    )
+
+    let promptEvent = try HookPayloadSanitizer.event(
+      from: promptPayload,
+      suppressionRules: rules
+    )
+    let projectEvent = try HookPayloadSanitizer.event(
+      from: projectPayload,
+      suppressionRules: rules
+    )
+    let regexEvent = try HookPayloadSanitizer.event(
+      from: regexPayload,
+      suppressionRules: rules
+    )
+    let replyEvent = try HookPayloadSanitizer.event(
+      from: replyPayload,
+      suppressionRules: rules
+    )
+
+    #expect(promptEvent.suppressedByRule)
+    #expect(projectEvent.suppressedByRule)
+    #expect(regexEvent.suppressedByRule)
+    #expect(replyEvent.suppressedByRule)
+    let encoded = String(decoding: try JSONEncoder().encode(promptEvent), as: UTF8.self)
+    #expect(!encoded.contains("submittedMessageKeywords"))
+    #expect(!encoded.contains("submittedMessageRegexPatterns"))
+    #expect(!encoded.contains("assistantReplyRegexPatterns"))
+    #expect(!encoded.contains("projectNames"))
+  }
+
+  @Test("正则规则拒绝无效输入并给匹配设置总超时")
+  func validatesAndBoundsRegexRules() {
+    #expect(AlertSuppressionRules.normalizedRegexRule(#"^release\s+blocked$"#) != nil)
+    #expect(AlertSuppressionRules.normalizedRegexRule("(") == nil)
+    #expect(
+      AlertSuppressionRules.normalizedRegexRule(
+        String(repeating: "a", count: AlertSuppressionRules.maximumRuleCharacters + 1)
+      ) == nil
+    )
+
+    let rules = AlertSuppressionRules(
+      assistantReplyRegexPatterns: [#"^(a|aa)+$"#]
+    )
+    let started = ContinuousClock.now
+    #expect(
+      !rules.suppresses(
+        submittedMessage: nil,
+        assistantReply: String(repeating: "a", count: 20_000) + "!",
+        workingDirectory: nil
+      )
+    )
+    #expect(started.duration(to: .now) < .seconds(1))
+  }
+
+  @Test("屏蔽规则文件限制大小并使用私有权限")
+  func persistsPrivateBoundedSuppressionRules() throws {
+    let root = FileManager.default.temporaryDirectory
+      .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let fileURL = root.appendingPathComponent("rules.json")
+    let rules = AlertSuppressionRules(
+      submittedMessageKeywords: ["无需提醒"],
+      submittedMessageRegexPatterns: [#"^/quiet\b"#],
+      assistantReplyRegexPatterns: [#"(?i)nothing\s+to\s+review"#],
+      projectNames: ["CodexDone"]
+    )
+
+    try AlertSuppressionRulesFile.save(rules, to: fileURL)
+
+    #expect(AlertSuppressionRulesFile.load(from: fileURL) == rules)
+    let attributes = try FileManager.default.attributesOfItem(atPath: fileURL.path)
+    let permissions = try #require(attributes[.posixPermissions] as? NSNumber)
+    #expect(permissions.intValue & 0o777 == 0o600)
+  }
+
+  @Test("缺少规则文件时使用两条可删除默认项且保存删除后不再注入")
+  func loadsVisibleProductDefaultsAndRespectsSavedDeletion() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    let rulesURL = root.appendingPathComponent("rules.json")
+
+    let defaults = AlertSuppressionRulesFile.load(from: rulesURL)
+
+    #expect(defaults.submittedMessageKeywords.isEmpty)
+    #expect(defaults.submittedMessageRegexPatterns.isEmpty)
+    #expect(
+      defaults.assistantReplyRegexPatterns
+        == [AlertSuppressionRules.defaultInternalSuggestionsReplyRegex]
+    )
+    #expect(defaults.projectNames == [AlertSuppressionRules.defaultRootProjectName])
+    #expect(
+      defaults.suppresses(
+        submittedMessage: nil,
+        assistantReply: #"{"suggestions":[{"title":"内部建议"}]}"#,
+        workingDirectory: "/tmp/VisibleProject"
+      )
+    )
+    #expect(
+      defaults.suppresses(
+        submittedMessage: "正常请求",
+        assistantReply: nil,
+        workingDirectory: "/"
+      )
+    )
+    #expect(
+      !defaults.suppresses(
+        submittedMessage: "正常请求",
+        assistantReply: "正常回复",
+        workingDirectory: "/tmp/VisibleProject"
+      )
+    )
+
+    try AlertSuppressionRulesFile.save(AlertSuppressionRules(), to: rulesURL)
+    let deletedDefaults = AlertSuppressionRulesFile.load(from: rulesURL)
+    #expect(deletedDefaults == AlertSuppressionRules())
+  }
+
+  @Test("旧版屏蔽规则迁移到当前结构并只合并一次默认项")
+  func migratesLegacySuppressionRules() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    let rulesURL = root.appendingPathComponent("rules.json")
+
+    try JSONSerialization.data(withJSONObject: [
+      "version": 1,
+      "messageKeywords": ["无需提醒"],
+      "projectNames": ["LegacyProject"],
+    ]).write(to: rulesURL)
+    let migratedV1 = AlertSuppressionRulesFile.load(from: rulesURL)
+    #expect(migratedV1.version == AlertSuppressionRules.currentVersion)
+    #expect(migratedV1.submittedMessageKeywords == ["无需提醒"])
+    #expect(migratedV1.submittedMessageRegexPatterns.isEmpty)
+    #expect(
+      migratedV1.assistantReplyRegexPatterns
+        == [AlertSuppressionRules.defaultInternalSuggestionsReplyRegex]
+    )
+    #expect(
+      migratedV1.projectNames
+        == ["LegacyProject", AlertSuppressionRules.defaultRootProjectName]
+    )
+
+    try JSONSerialization.data(withJSONObject: [
+      "version": 2,
+      "messageKeywords": ["skip me"],
+      "messageRegexPatterns": [#"(?i)^/quiet\b"#],
+      "projectNames": ["RegexProject"],
+    ]).write(to: rulesURL)
+    let migratedV2 = AlertSuppressionRulesFile.load(from: rulesURL)
+    #expect(migratedV2.version == AlertSuppressionRules.currentVersion)
+    #expect(migratedV2.submittedMessageKeywords == ["skip me"])
+    #expect(migratedV2.submittedMessageRegexPatterns == [#"(?i)^/quiet\b"#])
+    #expect(
+      migratedV2.assistantReplyRegexPatterns
+        == [AlertSuppressionRules.defaultInternalSuggestionsReplyRegex]
+    )
+    #expect(
+      migratedV2.projectNames
+        == ["RegexProject", AlertSuppressionRules.defaultRootProjectName]
+    )
+
+    try JSONSerialization.data(withJSONObject: [
+      "version": 3,
+      "submittedMessageKeywords": ["legacy v3"],
+      "submittedMessageRegexPatterns": [#"^legacy-v3$"#],
+      "assistantReplyRegexPatterns": [#"^user reply$"#],
+      "projectNames": ["V3Project"],
+    ]).write(to: rulesURL)
+    let migratedV3 = AlertSuppressionRulesFile.load(from: rulesURL)
+    #expect(migratedV3.version == AlertSuppressionRules.currentVersion)
+    #expect(migratedV3.submittedMessageKeywords == ["legacy v3"])
+    #expect(migratedV3.submittedMessageRegexPatterns == [#"^legacy-v3$"#])
+    #expect(
+      migratedV3.assistantReplyRegexPatterns
+        == [#"^user reply$"#, AlertSuppressionRules.defaultInternalSuggestionsReplyRegex]
+    )
+    #expect(
+      migratedV3.projectNames
+        == ["V3Project", AlertSuppressionRules.defaultRootProjectName]
+    )
+
+    try AlertSuppressionRulesFile.save(migratedV3, to: rulesURL)
+    let rewrittenEnvelope = try #require(
+      JSONSerialization.jsonObject(with: Data(contentsOf: rulesURL)) as? [String: Any]
+    )
+    #expect(rewrittenEnvelope["version"] as? Int == AlertSuppressionRules.currentVersion)
+  }
+
   @Test("拒绝未支持 Hook 与超大输入")
   func rejectsUnsupportedInput() {
     for eventName in ["PermissionRequest", "SubagentStop"] {
       let unsupported = Data(
-        "{\"hook_event_name\":\"(eventName)\",\"session_id\":\"s\",\"turn_id\":\"t\"}".utf8
+        "{\"hook_event_name\":\"\(eventName)\",\"session_id\":\"s\",\"turn_id\":\"t\"}".utf8
       )
       #expect(throws: HookPayloadSanitizationError.unsupportedEvent) {
         try HookPayloadSanitizer.event(from: unsupported)

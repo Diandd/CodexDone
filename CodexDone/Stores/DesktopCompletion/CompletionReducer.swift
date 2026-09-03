@@ -33,6 +33,7 @@ enum CompletionReducer {
       session.pendingEventID = nil
       session.conversationTitle = event.conversationTitle
       session.replyPreview = nil
+      session.suppressesCurrentTurn = event.suppressedByRule
 
     case .stop:
       guard
@@ -43,6 +44,15 @@ enum CompletionReducer {
       }
       if session.phase == .pendingCompletionDebounce {
         effects.append(.cancelPendingAlert(sessionID: event.sessionID))
+      }
+      if session.suppressesCurrentTurn || event.suppressedByRule {
+        session.phase = .idle
+        session.turnID = event.turnID
+        session.pendingEventID = nil
+        session.conversationTitle = nil
+        session.replyPreview = nil
+        session.suppressesCurrentTurn = false
+        break
       }
       session.phase = .pendingCompletionDebounce
       session.turnID = event.turnID
@@ -78,6 +88,7 @@ enum CompletionReducer {
     var updated = session
     updated.phase = .readyToReview
     updated.pendingEventID = nil
+    updated.suppressesCurrentTurn = false
     let record = ConversationCompletionRecord(
       id: eventID.uuidString.lowercased(),
       sessionID: session.sessionID,

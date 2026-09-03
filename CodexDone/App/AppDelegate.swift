@@ -1,6 +1,22 @@
 import AppKit
 import Darwin
 
+enum InitializationGuidePresentationPolicy {
+  static func launchContext(
+    forceForUITest: Bool,
+    isUITest: Bool,
+    hasPresentedInitializationGuide: Bool,
+    helperRequiresUpdate: Bool
+  ) -> InitializationGuideLaunchContext? {
+    if forceForUITest {
+      return helperRequiresUpdate ? .hookUpdate : .standard
+    }
+    guard !isUITest else { return nil }
+    if helperRequiresUpdate { return .hookUpdate }
+    return hasPresentedInitializationGuide ? nil : .standard
+  }
+}
+
 final class ApplicationInstanceLock {
   private let lockURL: URL
   private let fileManager: FileManager
@@ -189,7 +205,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       let isUITest = false
       let forceForUITest = false
     #endif
-    guard forceForUITest || (!isUITest && !hasPresentedInitializationGuide) else { return }
+    guard
+      let launchContext = InitializationGuidePresentationPolicy.launchContext(
+        forceForUITest: forceForUITest,
+        isUITest: isUITest,
+        hasPresentedInitializationGuide: hasPresentedInitializationGuide,
+        helperRequiresUpdate: environment.hookInspection.helperRequiresUpdate
+      )
+    else {
+      return
+    }
 
     if !isUITest {
       UserDefaults.standard.set(
@@ -197,17 +222,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         forKey: ProductConfiguration.initializationGuidePresentedKey
       )
     }
-    presentInitializationGuide()
+    presentInitializationGuide(launchContext: launchContext)
   }
 
   func presentInitializationGuide() {
+    presentInitializationGuide(launchContext: .standard)
+  }
+
+  private func presentInitializationGuide(
+    launchContext: InitializationGuideLaunchContext
+  ) {
     if let controller = initializationGuideWindowController,
       controller.window?.isVisible == true
     {
       controller.present()
       return
     }
-    let controller = InitializationGuideWindowController(environment: environment)
+    let controller = InitializationGuideWindowController(
+      environment: environment,
+      launchContext: launchContext
+    )
     initializationGuideWindowController = controller
     controller.present()
   }

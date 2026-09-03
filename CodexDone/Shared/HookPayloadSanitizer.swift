@@ -16,6 +16,7 @@ enum HookPayloadSanitizer {
 
   static func event(
     from data: Data,
+    suppressionRules: AlertSuppressionRules = AlertSuppressionRules(),
     receivedAt: Date = .now
   ) throws -> DesktopCompletionHookEvent {
     guard data.count <= maximumPayloadBytes else {
@@ -43,14 +44,17 @@ enum HookPayloadSanitizer {
 
     let turnID = boundedString(dictionary["turn_id"], maximumLength: 512)
     let workingDirectory = boundedString(dictionary["cwd"], maximumLength: 4_096)
+    let rawPrompt = dictionary["prompt"] as? String
+    let rawAssistantReply = dictionary["last_assistant_message"] as? String
+    let submittedPrompt = rawPrompt.map { String(contentAfterRequestMarker(in: $0)) }
     let conversationTitle =
       eventName == .userPromptSubmit
-      ? conversationTitle(from: dictionary["prompt"])
+      ? conversationTitle(from: rawPrompt)
       : nil
     let replyPreview =
       eventName == .stop
       ? normalizedPreview(
-        from: dictionary["last_assistant_message"],
+        from: rawAssistantReply,
         maximumCharacters: maximumReplyPreviewCharacters
       )
       : nil
@@ -59,6 +63,11 @@ enum HookPayloadSanitizer {
       sessionID: sessionID,
       turnID: turnID,
       receivedAt: receivedAt
+    )
+    let suppressedByRule = suppressionRules.suppresses(
+      submittedMessage: eventName == .userPromptSubmit ? submittedPrompt : nil,
+      assistantReply: eventName == .stop ? rawAssistantReply : nil,
+      workingDirectory: workingDirectory
     )
 
     return DesktopCompletionHookEvent(
@@ -69,12 +78,13 @@ enum HookPayloadSanitizer {
       workingDirectory: workingDirectory,
       conversationTitle: conversationTitle,
       replyPreview: replyPreview,
+      suppressedByRule: suppressedByRule,
       receivedAt: receivedAt
     )
   }
 
-  private static func conversationTitle(from value: Any?) -> String? {
-    guard let raw = value as? String, !raw.contains("\0") else { return nil }
+  private static func conversationTitle(from raw: String?) -> String? {
+    guard let raw, !raw.contains("\0") else { return nil }
     let source = contentAfterRequestMarker(in: raw)
     guard
       var title = normalizedPreview(

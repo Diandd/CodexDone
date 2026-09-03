@@ -197,7 +197,10 @@ private let rawEventName = parsedEventName ?? boundedInput.scannedEventName
 
 if
   !boundedInput.exceededMaximumSize,
-  let event = try? HookPayloadSanitizer.event(from: boundedInput.retainedData)
+  let event = try? HookPayloadSanitizer.event(
+    from: boundedInput.retainedData,
+    suppressionRules: AlertSuppressionRulesFile.load()
+  )
 {
   HookBridgeTransport.deliver(event)
 }

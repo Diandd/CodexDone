@@ -62,6 +62,53 @@ struct CompletionReducerTests {
     #expect(effects.isEmpty)
   }
 
+  @Test("命中屏蔽规则的本轮在 Stop 时直接结束且不生成提醒")
+  func suppressedTurnEndsWithoutReviewItem() {
+    let prompt = makeEvent(
+      .userPromptSubmit,
+      turnID: "turn-blocked",
+      conversationTitle: "忽略这类消息",
+      suppressedByRule: true
+    )
+    let running = CompletionReducer.reduce(session: nil, event: prompt).0
+    let stop = makeEvent(.stop, turnID: "turn-blocked", replyPreview: "本轮已停止。")
+
+    let (session, effects) = CompletionReducer.reduce(session: running, event: stop)
+
+    #expect(running.suppressesCurrentTurn)
+    #expect(session.phase == .idle)
+    #expect(session.pendingEventID == nil)
+    #expect(session.conversationTitle == nil)
+    #expect(session.replyPreview == nil)
+    #expect(!session.suppressesCurrentTurn)
+    #expect(effects.isEmpty)
+  }
+
+  @Test("Stop 回复规则命中时直接结束且不生成提醒")
+  func suppressedStopReplyEndsWithoutReviewItem() {
+    let prompt = makeEvent(
+      .userPromptSubmit,
+      turnID: "turn-reply-blocked",
+      conversationTitle: "检查最终结果"
+    )
+    let running = CompletionReducer.reduce(session: nil, event: prompt).0
+    let stop = makeEvent(
+      .stop,
+      turnID: "turn-reply-blocked",
+      replyPreview: "无需提醒的自动回复",
+      suppressedByRule: true
+    )
+
+    let (session, effects) = CompletionReducer.reduce(session: running, event: stop)
+
+    #expect(!running.suppressesCurrentTurn)
+    #expect(session.phase == .idle)
+    #expect(session.pendingEventID == nil)
+    #expect(session.conversationTitle == nil)
+    #expect(session.replyPreview == nil)
+    #expect(effects.isEmpty)
+  }
+
   @Test("防抖确认后只表达 readyToReview")
   func finalizeBecomesReadyToReview() {
     let prompt = makeEvent(
@@ -124,7 +171,8 @@ struct CompletionReducerTests {
     _ name: DesktopHookEventName,
     turnID: String,
     conversationTitle: String? = nil,
-    replyPreview: String? = nil
+    replyPreview: String? = nil,
+    suppressedByRule: Bool = false
   ) -> DesktopCompletionHookEvent {
     DesktopCompletionHookEvent(
       eventID: UUID(),
@@ -134,6 +182,7 @@ struct CompletionReducerTests {
       workingDirectory: "/tmp/CodexDone",
       conversationTitle: conversationTitle,
       replyPreview: replyPreview,
+      suppressedByRule: suppressedByRule,
       receivedAt: date
     )
   }

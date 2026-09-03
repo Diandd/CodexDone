@@ -81,6 +81,37 @@ struct HookSpoolConsumerTests {
     #expect(await consumer.pendingCount() == 0)
   }
 
+  @Test("升级后继续消费 0.2 Bridge 留下的 v4 Spool")
+  func acceptsReleasedV020SpoolEvent() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    let event = DesktopCompletionHookEvent(
+      eventID: UUID(),
+      eventName: .userPromptSubmit,
+      sessionID: "released-session",
+      turnID: "released-turn",
+      workingDirectory: "/tmp/ReleasedProject",
+      conversationTitle: "来自 0.2 的事件",
+      receivedAt: .now
+    )
+    try releasedV020EventData(event).write(to: root.appendingPathComponent("released.json"))
+    let consumer = HookSpoolConsumer(directoryURL: root)
+    let collector = HookEventCollector()
+
+    let delivered = await consumer.drain { received in
+      await collector.append(received)
+      return true
+    }
+    let received = await collector.events.first
+
+    #expect(delivered == 1)
+    #expect(received?.version == DesktopCompletionHookEvent.releasedSchemaVersion)
+    #expect(received?.suppressedByRule == false)
+    #expect(received?.conversationTitle == "来自 0.2 的事件")
+    #expect(await consumer.pendingCount() == 0)
+  }
+
   @Test("持久化失败时保留 Spool，重复 eventID 可在恢复后补写并删除")
   func retainsSpoolUntilDuplicateEventPersists() async throws {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -303,10 +334,14 @@ struct HookSpoolConsumerTests {
     )
 
     #expect(try send(accepted, to: socketURL) == HookSocketServer.acknowledgementByte)
+    #expect(
+      try sendRaw(releasedV020EventData(accepted), to: socketURL)
+        == HookSocketServer.acknowledgementByte
+    )
     #expect(try send(rejected, to: socketURL) == nil)
     #expect(try sendRaw(Data("not-json".utf8), to: socketURL) == nil)
     let collectedCount = await collector.events.count
-    #expect(collectedCount == 2)
+    #expect(collectedCount == 3)
   }
 
   @Test("Socket 目录无法设为私有时启动硬失败")
@@ -336,6 +371,17 @@ struct HookSpoolConsumerTests {
     let encoder = JSONEncoder()
     encoder.dateEncodingStrategy = .millisecondsSince1970
     try encoder.encode(event).write(to: url)
+  }
+
+  private func releasedV020EventData(_ event: DesktopCompletionHookEvent) throws -> Data {
+    let encoder = JSONEncoder()
+    encoder.dateEncodingStrategy = .millisecondsSince1970
+    var object = try #require(
+      JSONSerialization.jsonObject(with: encoder.encode(event)) as? [String: Any]
+    )
+    object["version"] = DesktopCompletionHookEvent.releasedSchemaVersion
+    object.removeValue(forKey: "suppressedByRule")
+    return try JSONSerialization.data(withJSONObject: object)
   }
 
   private func sendRaw(_ data: Data, to socketURL: URL) throws -> UInt8? {

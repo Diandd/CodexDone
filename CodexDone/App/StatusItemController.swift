@@ -156,9 +156,10 @@ enum StatusItemIconRenderer {
 
 private struct StatusItemPopoverRootView: View {
   let environment: AppEnvironment
+  let openCodex: () -> Void
 
   var body: some View {
-    MenuBarContentView()
+    MenuBarContentView(openCodex: openCodex)
       .environment(environment)
       .applicationLocalized(using: environment.localization)
   }
@@ -217,7 +218,12 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     popover.behavior = .transient
     popover.animates = true
     popover.contentViewController = NSHostingController(
-      rootView: StatusItemPopoverRootView(environment: environment)
+      rootView: StatusItemPopoverRootView(
+        environment: environment,
+        openCodex: { [weak self] in
+          self?.openCodexFromPopover()
+        }
+      )
     )
     refreshPopoverSize()
     applyPopoverAppearance()
@@ -318,6 +324,11 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
 
   @objc private func togglePopover(_ sender: NSStatusBarButton) {
     popover.isShown ? popover.performClose(sender) : showPopover()
+  }
+
+  private func openCodexFromPopover() {
+    popover.performClose(nil)
+    environment.openCodex()
   }
 
   func showPopover() {

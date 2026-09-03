@@ -4,6 +4,8 @@ enum HookRuntimePaths {
   #if DEBUG
     private static let socketOverrideKey = "CODEXDONE_BRIDGE_SOCKET_PATH"
     private static let spoolOverrideKey = "CODEXDONE_BRIDGE_SPOOL_DIR"
+    private static let suppressionRulesOverrideKey =
+      "CODEXDONE_BRIDGE_SUPPRESSION_RULES_PATH"
   #endif
 
   static var applicationSupportRoot: URL {
@@ -38,6 +40,17 @@ enum HookRuntimePaths {
 
   static var completionStateURL: URL {
     applicationSupportRoot.appendingPathComponent("completion-state.json")
+  }
+
+  static var alertSuppressionRulesURL: URL {
+    #if DEBUG
+      if let value = ProcessInfo.processInfo.environment[suppressionRulesOverrideKey],
+        !value.isEmpty
+      {
+        return URL(fileURLWithPath: value)
+      }
+    #endif
+    return applicationSupportRoot.appendingPathComponent("alert-suppression-rules.json")
   }
 
   static var installedHookBridgeURL: URL {

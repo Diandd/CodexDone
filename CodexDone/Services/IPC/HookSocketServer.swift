@@ -160,7 +160,7 @@ final class HookSocketServer: @unchecked Sendable {
     decoder.dateDecodingStrategy = .millisecondsSince1970
     guard
       let event = try? decoder.decode(DesktopCompletionHookEvent.self, from: data),
-      event.version == DesktopCompletionHookEvent.schemaVersion,
+      DesktopCompletionHookEvent.supportsSchemaVersion(event.version),
       await eventHandler(event)
     else {
       return

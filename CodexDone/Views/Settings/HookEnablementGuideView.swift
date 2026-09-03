@@ -309,7 +309,10 @@ private struct HookStatusRow: View {
 
 @MainActor
 final class InitializationGuideWindowController: NSWindowController {
-  init(environment: AppEnvironment) {
+  init(
+    environment: AppEnvironment,
+    launchContext: InitializationGuideLaunchContext = .standard
+  ) {
     let window = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: 700, height: 540),
       styleMask: [.titled, .closable],
@@ -322,7 +325,10 @@ final class InitializationGuideWindowController: NSWindowController {
     super.init(window: window)
 
     window.contentViewController = NSHostingController(
-      rootView: InitializationGuideView(onComplete: { [weak self] in self?.close() })
+      rootView: InitializationGuideView(
+        launchContext: launchContext,
+        onComplete: { [weak self] in self?.close() }
+      )
         .environment(environment)
         .applicationLocalized(using: environment.localization)
     )

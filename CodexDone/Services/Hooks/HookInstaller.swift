@@ -3,6 +3,7 @@ import Foundation
 struct HookInstallationInspection: Equatable, Sendable {
   let isInstalled: Bool
   let helperIsExecutable: Bool
+  let helperRequiresUpdate: Bool
   let configurationPath: String
   let configurationModifiedAt: Date?
   let handlerCommand: String?
@@ -11,6 +12,7 @@ struct HookInstallationInspection: Equatable, Sendable {
   init(
     isInstalled: Bool,
     helperIsExecutable: Bool,
+    helperRequiresUpdate: Bool = false,
     configurationPath: String,
     configurationModifiedAt: Date? = nil,
     handlerCommand: String? = nil,
@@ -18,6 +20,7 @@ struct HookInstallationInspection: Equatable, Sendable {
   ) {
     self.isInstalled = isInstalled
     self.helperIsExecutable = helperIsExecutable
+    self.helperRequiresUpdate = helperRequiresUpdate
     self.configurationPath = configurationPath
     self.configurationModifiedAt = configurationModifiedAt
     self.handlerCommand = handlerCommand
@@ -133,14 +136,18 @@ actor HookInstaller {
       return counts.count != 1 || counts[configuredCommand] != 1
     }
     let installed = configuredCommand != nil && !hasUnexpectedOwnedHandler
+    let helperRequiresUpdate = configuredCommand.map(helperNeedsUpdate(for:)) ?? false
     return HookInstallationInspection(
       isInstalled: installed,
       helperIsExecutable: bundledHelperIsExecutable,
+      helperRequiresUpdate: installed && helperRequiresUpdate,
       configurationPath: hooksURL.path,
       configurationModifiedAt: configurationModifiedAt,
       handlerCommand: configuredCommand ?? preferredCommand,
       detail: installed
-        ? L10n.text("已写入；首次运行需在 Codex 中审核信任")
+        ? (helperRequiresUpdate
+          ? L10n.text("检测到旧版 CodexDone Hook，需要修复")
+          : L10n.text("已写入；首次运行需在 Codex 中审核信任"))
         : (hasUnexpectedOwnedHandler
           ? L10n.text("检测到旧版 CodexDone Hook，需要修复")
           : L10n.text("尚未完整安装"))
@@ -414,16 +421,34 @@ actor HookInstaller {
   }
 
   private func isExecutableOwnedCommand(_ command: String) -> Bool {
+    guard let path = executablePath(from: command) else { return false }
+    return fileManager.isExecutableFile(atPath: path)
+  }
+
+  private func helperNeedsUpdate(for command: String) -> Bool {
+    guard
+      let path = executablePath(from: command),
+      fileManager.isExecutableFile(atPath: path),
+      fileManager.isExecutableFile(atPath: bundledHelperURL.path)
+    else {
+      return false
+    }
+    if URL(fileURLWithPath: path).standardizedFileURL == bundledHelperURL.standardizedFileURL {
+      return false
+    }
+    return !fileManager.contentsEqual(atPath: path, andPath: bundledHelperURL.path)
+  }
+
+  private func executablePath(from command: String) -> String? {
     guard
       command.hasPrefix("'"),
       command.hasSuffix("'"),
       command.count >= 2
     else {
-      return false
+      return nil
     }
     let path = String(command.dropFirst().dropLast())
-    guard !path.contains("'") else { return false }
-    return fileManager.isExecutableFile(atPath: path)
+    return path.contains("'") ? nil : path
   }
 
   private func containsOwnedCommand(in value: Any?, commands: Set<String>) -> Bool {

@@ -52,6 +52,21 @@ fail_ui_export() {
   exit 1
 }
 
+verify_ui_tests_do_not_synthesize_keyboard_input() {
+  local ui_test_source="$ROOT_DIR/CodexDoneUITests"
+  local matches
+
+  matches="$(rg -n '\.(typeKey|typeText)\(' "$ui_test_source" || true)"
+  if [[ -n "$matches" ]]; then
+    printf '%s\n' "$matches" >&2
+    printf '%s\n' \
+      'UI tests must not synthesize keyboard input because XCTest can add a keyboard layout to the user account.' >&2
+    printf '%s\n' \
+      'Cover keyboard handling with AppKit unit tests and keep UI automation to pointer interactions.' >&2
+    exit 1
+  fi
+}
+
 validate_and_copy_ui_attachments() {
   local manifest="$ATTACHMENT_EXPORT/manifest.json"
   local attachment_records="$ATTACHMENT_EXPORT/validated-attachments.tsv"
@@ -141,6 +156,7 @@ run_ui_tests() {
 
 remove_result "$UNIT_RESULT"
 remove_result "$UI_RESULT"
+verify_ui_tests_do_not_synthesize_keyboard_input
 
 xcodebuild -quiet \
   -project "$PROJECT_PATH" \

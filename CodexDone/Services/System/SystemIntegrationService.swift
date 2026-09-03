@@ -34,6 +34,16 @@ enum CodexApplicationOpenFailure: Equatable, Sendable {
   }
 }
 
+enum CodexReturnRoute: Equatable, Sendable {
+  case desktop
+  case unsupportedCLI
+}
+
+struct CodexReturnTarget: Equatable, Sendable {
+  let processIdentifier: pid_t
+  let bundleIdentifier: String?
+}
+
 @MainActor
 @Observable
 final class SystemIntegrationService {
@@ -101,6 +111,32 @@ final class SystemIntegrationService {
     NSApp.setActivationPolicy(visible ? .regular : .accessory)
   }
 
+  func captureCodexReturnTarget() -> CodexReturnTarget? {
+    guard let application = NSWorkspace.shared.frontmostApplication else { return nil }
+    return Self.resolveCodexReturnTarget(
+      processIdentifier: application.processIdentifier,
+      currentProcessIdentifier: ProcessInfo.processInfo.processIdentifier,
+      bundleIdentifier: application.bundleIdentifier,
+      currentBundleIdentifier: Bundle.main.bundleIdentifier,
+      isTerminated: application.isTerminated
+    )
+  }
+
+  @discardableResult
+  func returnToCodex(_ target: CodexReturnTarget?) -> Bool {
+    guard let target else { return openCodexApplication() }
+
+    guard Self.canReturnToCodex(target) else {
+      lastCodexOpenFailure = nil
+      return false
+    }
+    if activate(target) {
+      lastCodexOpenFailure = nil
+      return true
+    }
+    return openCodexApplication()
+  }
+
   @discardableResult
   func openCodexApplication() -> Bool {
     let workspace = NSWorkspace.shared
@@ -152,6 +188,52 @@ final class SystemIntegrationService {
     }
   }
 
+  static func resolveCodexReturnTarget(
+    processIdentifier: pid_t,
+    currentProcessIdentifier: pid_t,
+    bundleIdentifier: String?,
+    currentBundleIdentifier: String?,
+    isTerminated: Bool
+  ) -> CodexReturnTarget? {
+    guard
+      processIdentifier > 0,
+      processIdentifier != currentProcessIdentifier,
+      !isTerminated
+    else {
+      return nil
+    }
+    if let bundleIdentifier, bundleIdentifier == currentBundleIdentifier {
+      return nil
+    }
+    return CodexReturnTarget(
+      processIdentifier: processIdentifier,
+      bundleIdentifier: bundleIdentifier
+    )
+  }
+
+  static func returnRoute(for target: CodexReturnTarget) -> CodexReturnRoute {
+    target.bundleIdentifier == codexBundleIdentifier ? .desktop : .unsupportedCLI
+  }
+
+  static func canReturnToCodex(_ target: CodexReturnTarget?) -> Bool {
+    guard let target else { return true }
+    return returnRoute(for: target) == .desktop
+  }
+
+  static func requestApplicationActivation(
+    isAlreadyActive: Bool,
+    coordinatedActivation: () -> Bool,
+    fallbackActivation: () -> Bool
+  ) -> Bool {
+    if isAlreadyActive {
+      return true
+    }
+    if coordinatedActivation() {
+      return true
+    }
+    return fallbackActivation()
+  }
+
   static func resolveCodexAppServerExecutableURL(
     registeredApplicationURL: URL?,
     homeDirectoryURL: URL,
@@ -197,5 +279,38 @@ final class SystemIntegrationService {
     case .notRegistered, .notFound: .disabled
     @unknown default: .disabled
     }
+  }
+
+  private func activate(_ target: CodexReturnTarget) -> Bool {
+    let processApplication = NSRunningApplication(processIdentifier: target.processIdentifier)
+    let matchingProcessApplication: NSRunningApplication? = processApplication.flatMap {
+      application -> NSRunningApplication? in
+      guard !application.isTerminated else { return nil }
+      if let bundleIdentifier = target.bundleIdentifier,
+        application.bundleIdentifier != bundleIdentifier
+      {
+        return nil
+      }
+      return application
+    }
+    let application = matchingProcessApplication
+      ?? target.bundleIdentifier.flatMap { bundleIdentifier in
+        NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier)
+          .first(where: { !$0.isTerminated })
+      }
+    guard let application, !application.isTerminated else { return false }
+    return Self.requestApplicationActivation(
+      isAlreadyActive: application.isActive,
+      coordinatedActivation: {
+        NSApp.yieldActivation(to: application)
+        return application.activate(
+          from: NSRunningApplication.current,
+          options: [.activateAllWindows]
+        )
+      },
+      fallbackActivation: {
+        application.activate(options: [.activateAllWindows])
+      }
+    )
   }
 }

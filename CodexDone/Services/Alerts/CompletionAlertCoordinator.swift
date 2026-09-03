@@ -361,6 +361,21 @@ final class CompletionAlertCoordinator {
     )
   }
 
+  func setVisualAlertOpenCodexActions(
+    hud hudAction: @escaping @MainActor (String?) -> Void,
+    notch notchAction: @escaping @MainActor (String?, Bool) -> Void,
+    canOpenCodex: @escaping @MainActor (String?) -> Bool
+  ) {
+    hudCoordinator.setOpenCodexAction { sessionID in
+      hudAction(sessionID)
+    }
+    hudCoordinator.setOpenCodexAvailability { sessionID in
+      canOpenCodex(sessionID)
+    }
+    notchCoordinator.setOpenCodexAction(notchAction)
+    notchCoordinator.setOpenCodexAvailability(canOpenCodex)
+  }
+
   static func notificationShouldPlaySound(appSoundPlayed: Bool) -> Bool {
     !appSoundPlayed
   }

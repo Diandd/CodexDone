@@ -2,6 +2,19 @@ import AppKit
 import SwiftUI
 import UserNotifications
 
+enum InitializationGuideLaunchContext: Equatable {
+  case standard
+  case hookUpdate
+
+  var initialPage: InitializationPage {
+    self == .hookUpdate ? .permissions : .welcome
+  }
+
+  var presentsHookUpdateAlert: Bool {
+    self == .hookUpdate
+  }
+}
+
 struct InitializationGuideView: View {
   @Environment(AppEnvironment.self) private var environment
   @AppStorage("alerts.visualMode") private var visualMode = AlertVisualMode.defaultMode.rawValue
@@ -11,10 +24,22 @@ struct InitializationGuideView: View {
   @AppStorage("alerts.completion.builtInSound") private var builtInSound =
     AlertSituation.completion.defaultBuiltInSound
   @AppStorage("alerts.completion.useCustomSound") private var useCustomSound = false
-  @State private var page = InitializationPage.welcome
+  @State private var page: InitializationPage
   @State private var hookPlatform = HookGuidePlatform.desktop
+  @State private var presentsHookUpdateAlert: Bool
 
   let onComplete: () -> Void
+
+  init(
+    launchContext: InitializationGuideLaunchContext = .standard,
+    onComplete: @escaping () -> Void
+  ) {
+    _page = State(initialValue: launchContext.initialPage)
+    _presentsHookUpdateAlert = State(
+      initialValue: launchContext.presentsHookUpdateAlert
+    )
+    self.onComplete = onComplete
+  }
 
   var body: some View {
     VStack(spacing: 0) {
@@ -32,6 +57,14 @@ struct InitializationGuideView: View {
     .accessibilityElement(children: .contain)
     .accessibilityIdentifier("initialization-guide")
     .task { await environment.refreshHealth() }
+    .alert("需要更新 Hooks", isPresented: $presentsHookUpdateAlert) {
+      Button("稍后", role: .cancel) {}
+      Button("更新 Hooks") {
+        Task { await environment.installHooks() }
+      }
+    } message: {
+      Text("检测到旧版 CodexDone Hook，需要修复")
+    }
   }
 
   @ViewBuilder
@@ -118,11 +151,7 @@ struct InitializationGuideView: View {
                 || !environment.hookInspection.isInstalled
             )
 
-            Button(
-              environment.hookInspection.isInstalled
-                ? L10n.text("重新安装")
-                : L10n.text("安装 Hooks")
-            ) {
+            Button(hookInstallActionTitle) {
               Task { await environment.installHooks() }
             }
             .disabled(environment.isHookOperationInProgress)
@@ -409,6 +438,7 @@ struct InitializationGuideView: View {
 
   private var compactHookStatus: String {
     guard environment.hookInspection.isInstalled else { return L10n.text("尚未安装") }
+    if environment.hookInspection.helperRequiresUpdate { return L10n.text("需要更新 Hooks") }
     if environment.isHookStatusRefreshing,
       environment.hookStatusInspection.availability == .notChecked
     {
@@ -427,6 +457,12 @@ struct InitializationGuideView: View {
     if states.contains(.untrusted) { return L10n.text("待信任") }
     if states.contains(.disabled) { return L10n.text("有项目关闭") }
     return L10n.text("未完整发现")
+  }
+
+  private var hookInstallActionTitle: String {
+    guard environment.hookInspection.isInstalled else { return L10n.text("安装 Hooks") }
+    if environment.hookInspection.helperRequiresUpdate { return L10n.text("更新 Hooks") }
+    return L10n.text("重新安装")
   }
 
   private var notificationIsAuthorized: Bool {
@@ -450,7 +486,7 @@ struct InitializationGuideView: View {
   }
 }
 
-private enum InitializationPage: Int, CaseIterable, Identifiable {
+enum InitializationPage: Int, CaseIterable, Identifiable {
   case welcome
   case permissions
   case alertStyle

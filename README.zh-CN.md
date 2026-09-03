@@ -12,7 +12,7 @@
   <a href="README.md">English</a> · <strong>简体中文</strong>
 </p>
 
-CodexDone 接入 Codex Desktop 官方 Hooks，并在菜单栏中保留本轮停止后的待查看对话。
+CodexDone 接入 Codex Desktop 或 CLI 的官方 Hooks，并在菜单栏中保留本轮停止后的待查看对话。
 
 去看手机、喝杯水，或者忙点别的，不用再反复切回 Codex 看它停没停——本轮停止时，CodexDone 会提醒你回来查看。
 
@@ -22,6 +22,7 @@ CodexDone 接入 Codex Desktop 官方 Hooks，并在菜单栏中保留本轮停�
 - 支持多种视觉提示方式与多显示器选择
 - 支持系统通知、内置或自定义提示音
 - 支持自定义提醒标题和全屏外观
+- 可按发送内容关键词或正则、回复内容正则以及项目设置屏蔽规则
 
 ## 界面预览
 
@@ -46,7 +47,7 @@ CodexDone 接入 Codex Desktop 官方 Hooks，并在菜单栏中保留本轮停�
 ## 运行环境
 
 - 当前开发与测试环境：macOS 27
-- 支持 Codex Hooks 的 ChatGPT 桌面端
+- 支持 Hooks 的 Codex Desktop 或 CLI
 - 从源码构建时使用 Xcode 27
 
 ## 从源码运行
@@ -58,7 +59,7 @@ CodexDone 接入 Codex Desktop 官方 Hooks，并在菜单栏中保留本轮停�
 首次启动时：
 
 1. 在初始化引导或“**设置 → 常规**”中安装 Hooks。
-2. 打开“**ChatGPT 设置 → 钩子 → 用户配置**”。
+2. Desktop 打开“**ChatGPT 设置 → 钩子 → 用户配置**”；CLI 输入 `/hooks`。
 3. 分别信任并开启 `UserPromptSubmit` 与 `Stop`。
 
 ## 开发
