@@ -27,6 +27,11 @@ jobs:
           sudo xcode-select --switch /Applications/Xcode_27.2.app/Contents/Developer
           xcodebuild -version
 
+      - name: Install test dependency
+        run: brew install ripgrep
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+
       - name: Run tests and build Release
         run: |
           mkdir -p artifacts/build
