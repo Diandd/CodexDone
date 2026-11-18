@@ -23,8 +23,8 @@ final class CodexDoneUITests: XCTestCase {
     XCTAssertTrue(popover.waitForExistence(timeout: 5))
     let visualModeMenu = app.descendants(matching: .any)["menu-visual-mode-menu"]
     XCTAssertTrue(visualModeMenu.exists)
-    XCTAssertGreaterThanOrEqual(popover.frame.height, 370)
-    XCTAssertLessThanOrEqual(popover.frame.height, 380)
+    // Accessibility measures the content, excluding the 12 pt outer insets.
+    XCTAssertEqual(popover.frame.height, 350, accuracy: 1)
     let title = app.staticTexts["1 条待查看"]
     XCTAssertTrue(title.waitForExistence(timeout: 5))
     XCTAssertGreaterThan(title.frame.width, 50)
@@ -37,10 +37,11 @@ final class CodexDoneUITests: XCTestCase {
     let openCodex = app.buttons["menu-open-codex"]
     XCTAssertTrue(openCodex.exists)
     XCTAssertLessThan(visualModeMenu.frame.maxX, openCodex.frame.minX)
-    XCTAssertTrue(app.staticTexts["优化 CodexDone 菜单信息层级"].exists)
+    let conversation = app.buttons["menu-open-session-ui-test-record-codexdone"]
+    XCTAssertTrue(conversation.label.contains("优化 CodexDone 菜单信息层级"))
     XCTAssertTrue(app.staticTexts["CodexDone"].exists)
     XCTAssertTrue(
-      app.staticTexts["已调整聊天主题、项目名称与回复预览的层级，菜单内容现在更容易快速浏览。"].exists
+      conversation.label.contains("已调整聊天主题、项目名称与回复预览的层级，菜单内容现在更容易快速浏览。")
     )
     let attachment = XCTAttachment(screenshot: popover.screenshot())
     attachment.name = "completion-menu-popover.png"
@@ -143,11 +144,14 @@ final class CodexDoneUITests: XCTestCase {
     let popover = app.descendants(matching: .any)["menu-popover-root"]
     XCTAssertTrue(popover.waitForExistence(timeout: 5))
     let stablePopoverFrame = popover.frame
-    XCTAssertGreaterThanOrEqual(stablePopoverFrame.height, 370)
-    XCTAssertLessThanOrEqual(stablePopoverFrame.height, 380)
+    XCTAssertEqual(stablePopoverFrame.height, 350, accuracy: 1)
     XCTAssertTrue(app.staticTexts["2 条待查看"].waitForExistence(timeout: 5))
-    XCTAssertTrue(app.staticTexts["优化 CodexDone 菜单信息层级"].exists)
-    XCTAssertTrue(app.staticTexts["完善课程通知管理"].exists)
+    XCTAssertTrue(
+      app.buttons["menu-open-session-ui-test-record-codexdone"].label.contains("优化 CodexDone 菜单信息层级")
+    )
+    XCTAssertTrue(
+      app.buttons["menu-open-session-ui-test-record-sprout"].label.contains("完善课程通知管理")
+    )
     XCTAssertTrue(app.staticTexts["CodexDone"].exists)
     XCTAssertTrue(app.staticTexts["ProjectSprout"].exists)
     let acknowledgeButtons = app.buttons.matching(
@@ -195,7 +199,7 @@ final class CodexDoneUITests: XCTestCase {
     let stablePopoverFrame = popover.frame
 
     XCTAssertTrue(
-      app.staticTexts["优化 CodexDone 菜单信息层级"].waitForExistence(timeout: 5)
+      app.buttons["menu-open-session-ui-test-record-codexdone"].waitForExistence(timeout: 5)
     )
     XCTAssertTrue(popover.exists)
     assertFrame(popover.frame, remainsAt: stablePopoverFrame)
