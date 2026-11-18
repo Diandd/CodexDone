@@ -1,0 +1,59 @@
+name: Build macOS app
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: macos-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: xcode-27
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Select Xcode 27.2
+        run: |
+          sudo xcode-select --switch /Applications/Xcode_27.2.app/Contents/Developer
+          xcodebuild -version
+
+      - name: Run tests and build Release
+        run: |
+          mkdir -p artifacts/build
+          ./script/test.sh 2>&1 | tee artifacts/build/cloud-tests.log
+
+      - name: Verify and package app
+        run: |
+          app="$PWD/artifacts/build/DerivedData/Build/Products/Release/CodexDone.app"
+          ./script/verify_release_bundle.sh --run-hook-health-check "$app"
+          mkdir -p artifacts/release
+          ditto -c -k --sequesterRsrc --keepParent "$app" artifacts/release/CodexDone.app.zip
+
+      - name: Upload app
+        uses: actions/upload-artifact@v7
+        with:
+          name: CodexDone-macOS27-arm64
+          path: artifacts/release/CodexDone.app.zip
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results
+          path: |
+            artifacts/build/cloud-tests.log
+            artifacts/build/*.xcresult
+            artifacts/ui-tests/
+          retention-days: 7

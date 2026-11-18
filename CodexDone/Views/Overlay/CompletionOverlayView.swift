@@ -118,7 +118,7 @@ struct CompletionOverlayView: View {
           .accessibilityIdentifier("completion-overlay-headline")
 
         if let alert = presentation.latestAlert {
-          Text(alert.conversationTitle ?? L10n.text("Codex 对话"))
+          Text(alert.conversationTitle ?? L10n.text("Agent 对话"))
             .font(.system(size: 28, weight: .semibold, design: .rounded))
             .multilineTextAlignment(.center)
             .lineLimit(2)

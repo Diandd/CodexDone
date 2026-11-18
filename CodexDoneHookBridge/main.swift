@@ -182,6 +182,14 @@ if CommandLine.arguments.contains("--health-check") {
   exit(EXIT_SUCCESS)
 }
 
+private let source: AgentSource = {
+  guard let index = CommandLine.arguments.firstIndex(of: "--source") else { return .codex }
+  guard CommandLine.arguments.indices.contains(index + 1),
+    let source = AgentSource(rawValue: CommandLine.arguments[index + 1])
+  else { exit(EXIT_FAILURE) }
+  return source
+}()
+
 private let boundedInput = readBoundedHookInput(from: .standardInput)
 private let parsedEventName: String? = {
   guard
@@ -199,13 +207,15 @@ if
   !boundedInput.exceededMaximumSize,
   let event = try? HookPayloadSanitizer.event(
     from: boundedInput.retainedData,
+    source: source,
+    terminalSessionID: ProcessInfo.processInfo.environment["ITERM_SESSION_ID"],
     suppressionRules: AlertSuppressionRulesFile.load()
   )
 {
   HookBridgeTransport.deliver(event)
 }
 
-if rawEventName == DesktopHookEventName.stop.rawValue {
+if source == .codex, rawEventName == DesktopHookEventName.stop.rawValue {
   FileHandle.standardOutput.write(Data(#"{"continue":true}"#.utf8))
 }
 

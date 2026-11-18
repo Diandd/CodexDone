@@ -311,6 +311,8 @@ final class AppEnvironment {
   private(set) var notchUnreadIndicatorEnabled =
     NotchUnreadIndicatorPreference.defaultEnabled
 
+  private(set) var additionalHookInspections: [AgentSource: HookInstallationInspection] = [:]
+  @ObservationIgnored private let additionalHookInstallers: [AgentSource: HookInstaller]
   @ObservationIgnored private let hookInstaller: HookInstaller
   @ObservationIgnored private let hookStatusService: CodexHookStatusService
   @ObservationIgnored private let socketServer: HookSocketServer
@@ -371,6 +373,9 @@ final class AppEnvironment {
     hookInstaller = HookInstaller(
       installedHelperURL: HookRuntimePaths.installedHookBridgeURL
     )
+    additionalHookInstallers = Dictionary(uniqueKeysWithValues: [AgentSource.claude, .pi].map {
+      ($0, HookInstaller(source: $0, installedHelperURL: HookRuntimePaths.installedHookBridgeURL))
+    })
     hookStatusService = CodexHookStatusService()
     socketServer = HookSocketServer()
     spoolConsumer = HookSpoolConsumer()
@@ -636,6 +641,9 @@ final class AppEnvironment {
       if isUITest { return }
     #endif
     hookInspection = await hookInstaller.inspect()
+    for (source, installer) in additionalHookInstallers {
+      additionalHookInspections[source] = await installer.inspect()
+    }
     spoolCount = await spoolConsumer.pendingCount()
     notificationAuthorizationStatus =
       await alertCoordinator.notificationService.authorizationStatus()
@@ -695,6 +703,24 @@ final class AppEnvironment {
       hookStatusInspection = .notChecked
       await refreshHookStatus()
     }
+  }
+
+  func updateHooks(for source: AgentSource, install: Bool) async {
+    guard let installer = additionalHookInstallers[source], !isHookOperationInProgress else { return }
+    isHookOperationInProgress = true
+    defer { isHookOperationInProgress = false }
+    do {
+      additionalHookInspections[source] = try await (install ? installer.install() : installer.uninstall())
+      hookOperationMessage = install
+        ? (source == .pi ? L10n.text("已安装，在 Pi 中运行 /reload 生效") : L10n.text("已安装，重新启动会话后生效"))
+        : L10n.text("CodexDone Hooks 已移除。")
+    } catch {
+      hookOperationMessage = error.localizedDescription
+    }
+  }
+
+  func canOpenRecord(_ record: ConversationCompletionRecord) -> Bool {
+    canOpenCodex(sessionID: record.sessionID)
   }
 
   func requestNotificationAuthorization() async {
@@ -761,6 +787,11 @@ final class AppEnvironment {
   }
 
   private func returnToCodex(sessionID: String?) {
+    if let sessionID, let terminalID = terminalSessionID(for: sessionID) {
+      Task { await systemIntegrationService.openTerminalSession(terminalID) }
+      return
+    }
+    if let sessionID, AgentSource.forSession(sessionID) != .codex { return }
     let target = sessionID.flatMap { codexReturnTargets[$0] }
     guard SystemIntegrationService.canReturnToCodex(target) else { return }
     _ = systemIntegrationService.returnToCodex(target)
@@ -768,8 +799,17 @@ final class AppEnvironment {
 
   private func canOpenCodex(sessionID: String?) -> Bool {
     let resolvedSessionID = sessionID ?? completionStore.unreadRecords.first?.sessionID
+    if let resolvedSessionID {
+      if terminalSessionID(for: resolvedSessionID) != nil { return true }
+      if AgentSource.forSession(resolvedSessionID) != .codex { return false }
+    }
     let target = resolvedSessionID.flatMap { codexReturnTargets[$0] }
     return SystemIntegrationService.canReturnToCodex(target)
+  }
+
+  private func terminalSessionID(for sessionID: String) -> String? {
+    completionStore.sessions[sessionID]?.terminalSessionID
+      ?? completionStore.records.first(where: { $0.sessionID == sessionID })?.terminalSessionID
   }
 
   func importCustomSound(from url: URL) {
@@ -963,6 +1003,8 @@ final class AppEnvironment {
       guard age <= maximumAge else { return nil }
     }
     guard
+      event.source == .codex,
+      event.terminalSessionID == nil,
       event.eventName == .userPromptSubmit,
       !completionStore.hasProcessedEventID(event.eventID),
       !pendingCodexReturnTargetEventIDs.contains(event.eventID),

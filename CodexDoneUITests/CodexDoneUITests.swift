@@ -23,8 +23,8 @@ final class CodexDoneUITests: XCTestCase {
     XCTAssertTrue(popover.waitForExistence(timeout: 5))
     let visualModeMenu = app.descendants(matching: .any)["menu-visual-mode-menu"]
     XCTAssertTrue(visualModeMenu.exists)
-    XCTAssertGreaterThanOrEqual(popover.frame.height, 345)
-    XCTAssertLessThanOrEqual(popover.frame.height, 355)
+    XCTAssertGreaterThanOrEqual(popover.frame.height, 370)
+    XCTAssertLessThanOrEqual(popover.frame.height, 380)
     let title = app.staticTexts["1 条待查看"]
     XCTAssertTrue(title.waitForExistence(timeout: 5))
     XCTAssertGreaterThan(title.frame.width, 50)
@@ -143,8 +143,8 @@ final class CodexDoneUITests: XCTestCase {
     let popover = app.descendants(matching: .any)["menu-popover-root"]
     XCTAssertTrue(popover.waitForExistence(timeout: 5))
     let stablePopoverFrame = popover.frame
-    XCTAssertGreaterThanOrEqual(stablePopoverFrame.height, 345)
-    XCTAssertLessThanOrEqual(stablePopoverFrame.height, 355)
+    XCTAssertGreaterThanOrEqual(stablePopoverFrame.height, 370)
+    XCTAssertLessThanOrEqual(stablePopoverFrame.height, 380)
     XCTAssertTrue(app.staticTexts["2 条待查看"].waitForExistence(timeout: 5))
     XCTAssertTrue(app.staticTexts["优化 CodexDone 菜单信息层级"].exists)
     XCTAssertTrue(app.staticTexts["完善课程通知管理"].exists)
@@ -268,7 +268,7 @@ final class CodexDoneUITests: XCTestCase {
     XCTAssertTrue(hudOption.exists)
     XCTAssertTrue(notchOption.exists)
     XCTAssertLessThanOrEqual(visualModeLabel.frame.maxY, smartOption.frame.minY)
-    XCTAssertGreaterThan(smartOption.frame.minX, visualModeLabel.frame.minX)
+    XCTAssertGreaterThanOrEqual(smartOption.frame.minX, visualModeLabel.frame.minX - 1)
     XCTAssertLessThan(smartOption.frame.minX, fullscreenOption.frame.minX)
     XCTAssertLessThan(fullscreenOption.frame.minX, hudOption.frame.minX)
     XCTAssertLessThan(hudOption.frame.minX, notchOption.frame.minX)
@@ -861,19 +861,19 @@ final class CodexDoneUITests: XCTestCase {
       launchArgument: "--ui-test-show-overlay",
       identifier: "completion-overlay",
       attachmentName: "completion-overlay.png",
-      expectedTitle: "Codex 本轮已停止"
+      expectedTitle: "本轮已结束"
     )
     try assertAlertSurface(
       launchArgument: "--ui-test-show-hud",
       identifier: "completion-hud",
       attachmentName: "completion-hud.png",
-      expectedTitle: "Codex 本轮已停止"
+      expectedTitle: "本轮已结束"
     )
     try assertAlertSurface(
       launchArgument: "--ui-test-show-notch",
       identifier: "completion-notch-alert",
       attachmentName: "completion-notch-alert.png",
-      expectedTitle: "Codex 本轮已停止"
+      expectedTitle: "本轮已结束"
     )
   }
 

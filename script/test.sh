@@ -157,6 +157,7 @@ run_ui_tests() {
 remove_result "$UNIT_RESULT"
 remove_result "$UI_RESULT"
 verify_ui_tests_do_not_synthesize_keyboard_input
+node "$ROOT_DIR/script/test_pi_extension.mjs"
 
 xcodebuild -quiet \
   -project "$PROJECT_PATH" \

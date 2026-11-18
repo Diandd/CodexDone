@@ -412,7 +412,7 @@ struct NotchAlertView: View {
             .foregroundStyle(.white)
             .lineLimit(1)
 
-          Text(alert.conversationTitle ?? L10n.text("Codex 对话"))
+          Text(alert.conversationTitle ?? L10n.text("Agent 对话"))
             .font(.subheadline.weight(.medium))
             .foregroundStyle(.white.opacity(0.92))
             .lineLimit(1)
@@ -458,6 +458,8 @@ final class NotchWindowCoordinator {
   static let displayDuration: Duration = .seconds(6)
 
   private let localization: ApplicationLocalization
+  private let expandedDuration: Duration
+  private let compactDuration: Duration
   private let screensProvider: @MainActor () -> [NSScreen]
   private let focusedScreenProvider: @MainActor () -> NSScreen?
   private var panels: [NSPanel] = []
@@ -488,8 +490,12 @@ final class NotchWindowCoordinator {
   init(
     localization: ApplicationLocalization = .shared,
     screensProvider: @escaping @MainActor () -> [NSScreen] = { NSScreen.screens },
-    focusedScreenProvider: @escaping @MainActor () -> NSScreen? = { NSScreen.main }
+    focusedScreenProvider: @escaping @MainActor () -> NSScreen? = { NSScreen.main },
+    expandedDuration: Duration = NotchWindowCoordinator.displayDuration,
+    compactDuration: Duration = .seconds(2)
   ) {
+    self.expandedDuration = expandedDuration
+    self.compactDuration = compactDuration
     self.localization = localization
     self.screensProvider = screensProvider
     self.focusedScreenProvider = focusedScreenProvider
@@ -595,9 +601,10 @@ final class NotchWindowCoordinator {
         acknowledgesAll: unreadCount != nil
       )
     }
+    let expandedDuration = self.expandedDuration
     autoCollapseTask = Task { @MainActor [weak self] in
       do {
-        try await Task.sleep(for: Self.displayDuration)
+        try await Task.sleep(for: expandedDuration)
       } catch {
         return
       }
@@ -622,6 +629,10 @@ final class NotchWindowCoordinator {
     }
     if expandedSessionID == sessionID {
       expandedSessionID = nil
+      expansionTask?.cancel()
+      if let generation = presentationGeneration {
+        scheduleCompactDismissal(generation: generation)
+      }
       autoCollapseTask?.cancel()
       autoCollapseTask = nil
       for state in animationStates {
@@ -640,6 +651,7 @@ final class NotchWindowCoordinator {
     isEnabled: Bool,
     displayStrategy: AlertDisplayStrategy
   ) {
+    let previousUnreadCount = currentUnreadCount
     retainsUnreadIndicator = isEnabled
     currentUnreadCount = isEnabled ? max(0, unreadCount) : 0
     for state in animationStates where retainedUnreadCount > 0 {
@@ -663,6 +675,7 @@ final class NotchWindowCoordinator {
         return
       }
     }
+    guard !panels.isEmpty || retainedUnreadCount > previousUnreadCount else { return }
     presentCompactIndicator(displayStrategy: displayStrategy)
   }
 
@@ -744,12 +757,15 @@ final class NotchWindowCoordinator {
       sessionID: nil,
       acknowledgesAll: retainedUnreadCount > 0
     )
-    guard !retainsUnreadIndicator || retainedUnreadCount == 0 else { return }
+    scheduleCompactDismissal(generation: generation)
+  }
 
+  private func scheduleCompactDismissal(generation: UUID) {
+    let delay = compactDuration + .seconds(NotchAlertMotion.springDuration)
     postCollapseTask?.cancel()
     postCollapseTask = Task { @MainActor [weak self] in
       do {
-        try await Task.sleep(for: .seconds(NotchAlertMotion.springDuration))
+        try await Task.sleep(for: delay)
       } catch {
         return
       }
@@ -879,7 +895,9 @@ final class NotchWindowCoordinator {
     )
     guard !screens.isEmpty else { return }
 
-    presentationGeneration = UUID()
+    let generation = UUID()
+    presentationGeneration = generation
+    scheduleCompactDismissal(generation: generation)
     currentDisplayStrategy = displayStrategy
     for screen in screens {
       let layout = NotchAlertLayout(screen: screen)

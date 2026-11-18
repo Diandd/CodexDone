@@ -80,6 +80,7 @@ REMAINING_QUARANTINE="$(
   --options runtime \
   --timestamp \
   --sign "$SIGNING_IDENTITY" \
+  --preserve-metadata=entitlements \
   "$SIGNED_APP"
 
 # Pre-notarization verification is deliberately static. Launching a transferred

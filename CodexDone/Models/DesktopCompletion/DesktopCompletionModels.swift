@@ -46,6 +46,8 @@ enum ConversationCompletionPhase: String, Codable, Equatable, Sendable {
 struct CompletionSessionState: Codable, Equatable, Identifiable, Sendable {
   var id: String { sessionID }
 
+  var terminalSessionID: String? = nil
+  var source: AgentSource { .forSession(sessionID) }
   let sessionID: String
   var phase: ConversationCompletionPhase
   var turnID: String?
@@ -59,6 +61,8 @@ struct CompletionSessionState: Codable, Equatable, Identifiable, Sendable {
 
 struct ConversationCompletionRecord: Codable, Equatable, Identifiable, Sendable {
   let id: String
+  var terminalSessionID: String? = nil
+  var source: AgentSource { .forSession(sessionID) }
   let sessionID: String
   let turnID: String?
   let projectDisplayName: String

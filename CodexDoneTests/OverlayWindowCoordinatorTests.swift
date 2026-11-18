@@ -310,6 +310,30 @@ final class OverlayWindowCoordinatorTests: XCTestCase {
     XCTAssertLessThan(interactionPanel.frame.height, panel.frame.height)
   }
 
+  func testUnreadNotchDisappearsAndDoesNotReturnOnSynchronization() async throws {
+    let screen = try XCTUnwrap(NSScreen.main)
+    let coordinator = NotchWindowCoordinator(screensProvider: { [screen] },
+      expandedDuration: .milliseconds(20), compactDuration: .milliseconds(20))
+    coordinator.show(Self.alert(sessionID: "unread"), headline: "Ready",
+      displayStrategy: .primary, unreadCount: 2)
+    XCTAssertTrue(coordinator.isPresenting)
+    try await Task.sleep(for: .seconds(1))
+    XCTAssertFalse(coordinator.isPresenting)
+    XCTAssertEqual(coordinator.retainedUnreadCount, 2)
+    coordinator.synchronizeUnreadIndicator(unreadCount: 2, isEnabled: true, displayStrategy: .primary)
+    XCTAssertFalse(coordinator.isPresenting)
+    coordinator.synchronizeUnreadIndicator(unreadCount: 3, isEnabled: true, displayStrategy: .primary)
+    XCTAssertTrue(coordinator.isPresenting)
+    try await Task.sleep(for: .seconds(1))
+    XCTAssertFalse(coordinator.isPresenting)
+  }
+
+  func testTerminalScriptSelectsExactSessionAndRejectsInvalidIdentity() {
+    let script = SystemIntegrationService.terminalActivationScript(sessionID: "w0t1p0:12345678-1234-1234-1234-123456789ABC")
+    XCTAssertTrue(script?.contains("unique ID of terminalSession") == true)
+    XCTAssertNil(SystemIntegrationService.terminalActivationScript(sessionID: "invalid"))
+  }
+
   func testNotchDismissalWaitsForExpandedCollapseBeforeFading() {
     XCTAssertEqual(
       NotchWindowCoordinator.dismissalFadeDelay(hasExpandedState: true),
@@ -575,19 +599,19 @@ final class OverlayWindowCoordinatorTests: XCTestCase {
 
     coordinator.show(
       Self.alert(sessionID: "session-a"),
-      headline: "Codex 本轮已停止",
+      headline: "本轮已结束",
       displayStrategy: .focused,
       unreadCount: 1
     )
     coordinator.show(
       Self.alert(sessionID: "session-b"),
-      headline: "Codex 本轮已停止",
+      headline: "本轮已结束",
       displayStrategy: .focused,
       unreadCount: 2
     )
     coordinator.show(
       Self.alert(sessionID: "test-session"),
-      headline: "Codex 本轮已停止",
+      headline: "本轮已结束",
       displayStrategy: .focused,
       unreadCount: nil
     )

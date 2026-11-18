@@ -67,6 +67,7 @@ enum CompletionReducer {
       )
     }
 
+    session.terminalSessionID = event.terminalSessionID ?? session.terminalSessionID
     session.projectDisplayName = projectName
     session.lastEventAt = event.receivedAt
     return (session, effects)
@@ -91,6 +92,7 @@ enum CompletionReducer {
     updated.suppressesCurrentTurn = false
     let record = ConversationCompletionRecord(
       id: eventID.uuidString.lowercased(),
+      terminalSessionID: session.terminalSessionID,
       sessionID: session.sessionID,
       turnID: session.turnID,
       projectDisplayName: session.projectDisplayName,
@@ -106,11 +108,11 @@ enum CompletionReducer {
 
   static func projectDisplayName(for workingDirectory: String?) -> String {
     guard let workingDirectory, !workingDirectory.isEmpty else {
-      return L10n.text("Codex 对话")
+      return L10n.text("Agent 对话")
     }
     let name = URL(fileURLWithPath: workingDirectory).lastPathComponent
       .trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !name.isEmpty else { return L10n.text("Codex 对话") }
+    guard !name.isEmpty else { return L10n.text("Agent 对话") }
     return String(name.prefix(80))
   }
 }

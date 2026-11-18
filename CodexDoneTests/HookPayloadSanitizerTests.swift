@@ -4,6 +4,23 @@ import Testing
 @testable import CodexDone
 
 struct HookPayloadSanitizerTests {
+  @Test("不同 Agent 的同名会话独立，终端标识可持久化")
+  func agentNamespacesAndTerminalIdentity() throws {
+    let payload = Data(#"{"hook_event_name":"UserPromptSubmit","session_id":"shared","prompt":"Fix tests"}"#.utf8)
+    let terminalID = "12345678-1234-1234-1234-123456789ABC"
+    let events = try AgentSource.allCases.map { source in
+      try HookPayloadSanitizer.event(from: payload, source: source,
+        terminalSessionID: "w1t2p0:" + terminalID, receivedAt: Date(timeIntervalSince1970: 100))
+    }
+    #expect(Set(events.map(\.sessionID)).count == 3)
+    #expect(Set(events.map(\.eventID)).count == 3)
+    #expect(events.map(\.source) == AgentSource.allCases)
+    #expect(events.allSatisfy { $0.terminalSessionID == terminalID })
+    let restored = try JSONDecoder().decode(DesktopCompletionHookEvent.self, from: JSONEncoder().encode(events[1]))
+    #expect(restored == events[1])
+    #expect(HookPayloadSanitizer.normalizedTerminalSessionID("invalid\";activate") == nil)
+  }
+
   @Test("只传递有界派生内容且事件 ID 对同一 Hook 稳定")
   func sanitizesAndDeduplicates() throws {
     let payload = try JSONSerialization.data(

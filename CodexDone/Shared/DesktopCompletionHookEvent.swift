@@ -1,5 +1,36 @@
 import Foundation
 
+enum AgentSource: String, CaseIterable, Identifiable, Sendable {
+  case codex, claude, pi
+
+  var id: String { rawValue }
+  var title: String {
+    switch self {
+    case .codex: "Codex"
+    case .claude: "Claude Code"
+    case .pi: "Pi Agent"
+    }
+  }
+  var symbol: String {
+    switch self {
+    case .codex: "terminal"
+    case .claude: "sparkle"
+    case .pi: "circle.hexagongrid"
+    }
+  }
+
+  // Keep existing Codex IDs intact; other tools have separate session namespaces.
+  func scopedSessionID(_ id: String) -> String {
+    self == .codex ? id : "\(rawValue):\(id)"
+  }
+
+  static func forSession(_ id: String) -> Self {
+    if id.hasPrefix("claude:") { return .claude }
+    if id.hasPrefix("pi:") { return .pi }
+    return .codex
+  }
+}
+
 enum DesktopHookEventName: String, Codable, CaseIterable, Hashable, Sendable {
   case userPromptSubmit = "UserPromptSubmit"
   case stop = "Stop"
@@ -8,6 +39,9 @@ struct DesktopCompletionHookEvent: Codable, Equatable, Sendable {
   static let schemaVersion = 5
   static let releasedSchemaVersion = 4
 
+  var source: AgentSource { .forSession(sessionID) }
+
+  var terminalSessionID: String? = nil
   let version: Int
   let eventID: UUID
   let eventName: DesktopHookEventName
@@ -28,8 +62,10 @@ struct DesktopCompletionHookEvent: Codable, Equatable, Sendable {
     conversationTitle: String? = nil,
     replyPreview: String? = nil,
     suppressedByRule: Bool = false,
-    receivedAt: Date
+    receivedAt: Date,
+    terminalSessionID: String? = nil
   ) {
+    self.terminalSessionID = terminalSessionID
     version = Self.schemaVersion
     self.eventID = eventID
     self.eventName = eventName
@@ -47,6 +83,7 @@ struct DesktopCompletionHookEvent: Codable, Equatable, Sendable {
   }
 
   private enum CodingKeys: String, CodingKey {
+    case terminalSessionID
     case version
     case eventID
     case eventName
@@ -61,6 +98,7 @@ struct DesktopCompletionHookEvent: Codable, Equatable, Sendable {
 
   init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
+    terminalSessionID = try container.decodeIfPresent(String.self, forKey: .terminalSessionID)
     version = try container.decode(Int.self, forKey: .version)
     eventID = try container.decode(UUID.self, forKey: .eventID)
     eventName = try container.decode(DesktopHookEventName.self, forKey: .eventName)

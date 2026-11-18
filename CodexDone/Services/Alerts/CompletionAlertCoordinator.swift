@@ -156,9 +156,9 @@ enum SystemUserIdleTimeProvider {
 }
 
 extension AlertSituation {
-  var alertTitle: String { L10n.text("Codex 本轮已停止") }
+  var alertTitle: String { L10n.text("本轮已结束") }
 
-  var alertBody: String { L10n.text("可以返回 Codex 查看本轮结果") }
+  var alertBody: String { L10n.text("可以返回会话查看本轮结果") }
 
   var systemImage: String { "bell.badge.fill" }
 }

@@ -6,7 +6,7 @@ enum ProductConfiguration {
   static let bundleIdentifier = "com.dianstudios.codexdone"
   static let loggerSubsystem = bundleIdentifier
   static var shortDescription: String {
-    L10n.text("Codex 本轮停下时，提醒你回来查看")
+    L10n.text("Agent 本轮结束时，提醒你回来查看")
   }
   static let settingsWindowID = "settings"
   static let initializationGuidePresentedKey = "onboarding.initializationGuidePresented"

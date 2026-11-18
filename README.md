@@ -5,14 +5,14 @@
 <h1 align="center">CodexDone</h1>
 
 <p align="center">
-  A native macOS menu-bar app that reminds you when a Codex turn stops.
+  A native macOS menu-bar app that reminds you when an AI coding agent finishes a turn.
 </p>
 
 <p align="center">
   <strong>English</strong> · <a href="README.zh-CN.md">简体中文</a>
 </p>
 
-CodexDone connects to the official Codex Hooks in Desktop or CLI and keeps stopped turns ready for review in the menu bar.
+CodexDone connects to Codex Desktop/CLI, Claude Code, and Pi Agent, and keeps finished turns ready for review in the menu bar.
 
 Check your phone, grab a drink, or work on something else—there is no need to keep switching back to see whether Codex has stopped. CodexDone will let you know when it is time to return.
 
@@ -47,7 +47,8 @@ Check your phone, grab a drink, or work on something else—there is no need to 
 ## Environment
 
 - Currently developed and tested on macOS 27
-- Codex Desktop or CLI with Hooks support
+- Codex Desktop/CLI with Hooks support, Claude Code, or Pi Agent 1.5.2+
+- Node.js 22.13+ for Pi extension development checks
 - Xcode 27 when building from source
 
 ## Run from source
@@ -62,7 +63,31 @@ On first launch:
 2. In Desktop, open **ChatGPT Settings → Hooks → User Configuration**; in CLI, enter `/hooks`.
 3. Trust and enable `UserPromptSubmit` and `Stop`.
 
+## Connect your agents
+
+In **Settings → General → Connected agents**, connect each tool you use:
+
+- **Codex:** install Hooks, then trust and enable `UserPromptSubmit` and `Stop` as described above.
+- **Claude Code:** connect to merge those events into `~/.claude/settings.json`, preserving existing settings and hooks. Restart the Claude Code session.
+- **Pi Agent:** connect to install `~/.pi/agent/extensions/codexdone.ts`, then run `/reload`. The extension alerts on `agent_settled`, after automatic retries and queued work finish.
+
+Click a completed message to select its original **iTerm2 window, tab, and split pane**. This uses `ITERM_SESSION_ID` inherited by the local agent process. Allow CodexDone to control iTerm2 when macOS asks. Existing records without a terminal ID cannot locate a terminal session; new turns capture it automatically. SSH and tmux pane routing are not included.
+
+The notch alert collapses after six seconds, then its compact indicator disappears after two seconds. Unread messages remain in the menu bar.
+
+Integration references: [Claude Code hooks](https://code.claude.com/docs/en/hooks), [Pi extensions](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/extensions.md), [iTerm2 scripting](https://iterm2.com/documentation-scripting.html).
+
 ## Development
+
+### Build on GitHub
+
+Fork this repository and enable Actions in your fork. Pushing a branch runs **Build macOS app** on an Apple Silicon Mac with Xcode 27.2. You can also start it from **Actions → Build macOS app → Run workflow**.
+
+The workflow runs `script/test.sh`, verifies the Release bundle, and uploads `CodexDone-macOS27-arm64`. Download that artifact from a successful run, extract `CodexDone.app.zip`, and move the app to Applications. Test results and UI screenshots are available in `test-results`; artifacts are retained for seven days.
+
+The app requires macOS 27 on Apple Silicon. This development build is ad-hoc signed and not notarized; macOS may require **System Settings → Privacy & Security → Open Anyway** on first launch. Your Mac does not need Xcode to run it.
+
+### Local checks
 
 ```bash
 # Run all checks

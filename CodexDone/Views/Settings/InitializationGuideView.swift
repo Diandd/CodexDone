@@ -97,7 +97,7 @@ struct InitializationGuideView: View {
       VStack(spacing: 8) {
         Text("欢迎使用 CodexDone")
           .font(.largeTitle.bold())
-        Text("Codex 本轮停下时，提醒你回来查看")
+        Text("Agent 本轮结束时，提醒你回来查看")
           .font(.title3)
           .foregroundStyle(.secondary)
       }
@@ -600,41 +600,21 @@ struct VisualAlertModeSelector: View {
       lastEnabledMode = mode
       storedMode = mode.rawValue
     } label: {
-      VStack(spacing: 9) {
-        AlertStyleDesktopPreview(
-          mode: mode,
-          smartActiveDestination: AlertVisualDestination(
-            storedValue: smartActiveDestination,
-            fallback: .defaultActive
-          ),
-          smartAwayDestination: AlertVisualDestination(
-            storedValue: smartAwayDestination,
-            fallback: .defaultAway
-          )
-        )
-          .frame(width: 88, height: 68)
-          .clipped()
+      VStack(spacing: 8) {
+        Image(systemName: mode == .smart ? "sparkles" : mode == .fullscreen ? "rectangle.inset.filled" : mode == .hud ? "rectangle.topthird.inset.filled" : "capsule.tophalf.filled")
+          .font(.system(size: 20, weight: .regular))
+          .foregroundStyle(selected ? Color.accentColor : Color.secondary)
           .accessibilityHidden(true)
-
-        HStack(spacing: 6) {
-          Text(mode.title)
-            .font(.callout.weight(.semibold))
-            .lineLimit(1)
-            .minimumScaleFactor(0.62)
-          if selected {
-            Image(systemName: "checkmark.circle.fill")
-              .foregroundStyle(.tint)
-          }
-        }
+        Text(mode.title)
+          .font(.system(size: 12, weight: selected ? .semibold : .regular))
+          .lineLimit(1)
       }
-      .padding(6)
-      .frame(width: 100)
-      .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 11))
+      .frame(maxWidth: .infinity)
+      .padding(.vertical, 12)
+      .background(selected ? Color.accentColor.opacity(0.08) : Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
       .overlay {
-        RoundedRectangle(cornerRadius: 11)
-          .stroke(
-            selected ? Color.accentColor : Color(nsColor: .separatorColor),
-            lineWidth: selected ? 3 : 1)
+        RoundedRectangle(cornerRadius: 8)
+          .strokeBorder(selected ? Color.accentColor.opacity(0.5) : Color(nsColor: .separatorColor).opacity(0.5), lineWidth: 1)
       }
     }
     .buttonStyle(.plain)
@@ -855,7 +835,7 @@ private struct AlertStyleDesktopPreview: View {
         Image(systemName: "bell.badge.fill")
           .font(.system(size: 15, weight: .semibold))
           .symbolRenderingMode(.hierarchical)
-        Text("Codex 本轮已停止")
+        Text("本轮已结束")
           .font(.system(size: 7.5, weight: .bold, design: .rounded))
           .lineLimit(1)
         Text("检查 CodexDone 提醒样式")
@@ -878,7 +858,7 @@ private struct AlertStyleDesktopPreview: View {
         .font(.system(size: 8, weight: .semibold))
         .foregroundStyle(.green)
       VStack(alignment: .leading, spacing: 1) {
-        Text("Codex 本轮已停止")
+        Text("本轮已结束")
           .font(.system(size: 5.3, weight: .semibold))
           .lineLimit(1)
           .minimumScaleFactor(0.8)
@@ -921,7 +901,7 @@ private struct AlertStyleDesktopPreview: View {
             .font(.system(size: 7.5, weight: .semibold))
             .foregroundStyle(.green)
           VStack(alignment: .leading, spacing: 1) {
-            Text("Codex 本轮已停止")
+            Text("本轮已结束")
               .font(.system(size: 5, weight: .semibold))
               .lineLimit(1)
               .minimumScaleFactor(0.8)

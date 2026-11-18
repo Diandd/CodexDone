@@ -398,6 +398,7 @@ final class DesktopCompletionStore {
     lastUserPromptAt: inout Date?,
     lastStopAt: inout Date?
   ) {
+    guard event.source == .codex else { return }
     switch event.eventName {
     case .userPromptSubmit:
       lastUserPromptAt = max(lastUserPromptAt ?? .distantPast, event.receivedAt)

@@ -53,7 +53,7 @@ enum HookInstallerError: LocalizedError {
     case .helperMissing:
       L10n.text("应用内的 Hook Bridge 不存在或不可执行。")
     case .malformedConfiguration:
-      L10n.text("现有 hooks.json 不是有效的 JSON 对象；为避免覆盖，未做任何修改。")
+      L10n.text("现有配置不是有效的 JSON 对象，无法合并。")
     case .incompatibleHookShape:
       L10n.text("现有 Hook 配置结构无法安全合并；为避免覆盖，未做任何修改。")
     case .inlineHooksAlreadyConfigured:
@@ -69,6 +69,8 @@ actor HookInstaller {
     var commands: [String]
   }
 
+  private let source: AgentSource
+  private let extensionTemplateURL: URL?
   private let hooksURL: URL
   private let configURL: URL
   private let bundledHelperURL: URL
@@ -77,31 +79,42 @@ actor HookInstaller {
   private let fileManager: FileManager
 
   init(
-    hooksURL: URL = FileManager.default.homeDirectoryForCurrentUser
-      .appendingPathComponent(".codex/hooks.json"),
+    source: AgentSource = .codex,
+    hooksURL: URL? = nil,
     configURL: URL = FileManager.default.homeDirectoryForCurrentUser
       .appendingPathComponent(".codex/config.toml"),
     helperURL: URL = Bundle.main.bundleURL
       .appendingPathComponent("Contents/Helpers/CodexDoneHookBridge"),
     installedHelperURL: URL? = nil,
-    receiptURL: URL = HookRuntimePaths.applicationSupportRoot
-      .appendingPathComponent("hook-installation.json"),
+    receiptURL: URL? = nil,
+    extensionTemplateURL: URL? = Bundle.main.url(forResource: "pi-extension", withExtension: "ts"),
     fileManager: FileManager = .default
   ) {
-    self.hooksURL = hooksURL
+    self.source = source
+    self.extensionTemplateURL = extensionTemplateURL
+    let home = fileManager.homeDirectoryForCurrentUser
+    let path: String
+    switch source {
+    case .codex: path = ".codex/hooks.json"
+    case .claude: path = ".claude/settings.json"
+    case .pi: path = ".pi/agent/extensions/codexdone.ts"
+    }
+    self.hooksURL = hooksURL ?? home.appendingPathComponent(path)
     self.configURL = configURL
     bundledHelperURL = helperURL
     self.installedHelperURL = installedHelperURL ?? helperURL
-    self.receiptURL = receiptURL
+    self.receiptURL = receiptURL ?? HookRuntimePaths.applicationSupportRoot
+      .appendingPathComponent(source == .codex ? "hook-installation.json" : "\(source.rawValue)-installation.json")
     self.fileManager = fileManager
   }
 
   func inspect() -> HookInstallationInspection {
+    if source == .pi { return inspectPi() }
     let bundledHelperIsExecutable = fileManager.isExecutableFile(
       atPath: bundledHelperURL.path
     )
     let commands = ownedCommands()
-    let preferredCommand = shellQuoted(installedHelperURL.path)
+    let preferredCommand = handlerCommand(for: installedHelperURL)
     let configurationModifiedAt = hooksConfigurationModificationDate()
     guard
       let root = try? readRoot(),
@@ -147,7 +160,7 @@ actor HookInstaller {
       detail: installed
         ? (helperRequiresUpdate
           ? L10n.text("检测到旧版 CodexDone Hook，需要修复")
-          : L10n.text("已写入；首次运行需在 Codex 中审核信任"))
+          : (source == .codex ? L10n.text("已写入；首次运行需在 Codex 中审核信任") : L10n.text("已安装，重新启动会话后生效")))
         : (hasUnexpectedOwnedHandler
           ? L10n.text("检测到旧版 CodexDone Hook，需要修复")
           : L10n.text("尚未完整安装"))
@@ -162,7 +175,15 @@ actor HookInstaller {
     guard runHealthCheck(executableURL: installedHelperURL) else {
       throw HookInstallerError.healthCheckFailed
     }
-    if hasInlineHooks(), !fileManager.fileExists(atPath: hooksURL.path) {
+    if source == .pi {
+      try verifyPiExtensionOwnership()
+      let contents = try piExtensionContents()
+      try backupExistingConfiguration()
+      try fileManager.createDirectory(at: hooksURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+      try contents.write(to: hooksURL, atomically: true, encoding: .utf8)
+      return inspect()
+    }
+    if source == .codex, hasInlineHooks(), !fileManager.fileExists(atPath: hooksURL.path) {
       throw HookInstallerError.inlineHooksAlreadyConfigured
     }
 
@@ -177,7 +198,7 @@ actor HookInstaller {
       hooks = [:]
     }
 
-    let command = shellQuoted(installedHelperURL.path)
+    let command = handlerCommand(for: installedHelperURL)
     let previouslyOwnedCommands = ownedCommands()
     hooks = removingOwnedCommands(fromAllEvents: hooks, commands: previouslyOwnedCommands)
     for eventName in DesktopHookEventName.allCases {
@@ -212,6 +233,14 @@ actor HookInstaller {
   }
 
   func uninstall() throws -> HookInstallationInspection {
+    if source == .pi {
+      try verifyPiExtensionOwnership()
+      if fileManager.fileExists(atPath: hooksURL.path) {
+        try backupExistingConfiguration()
+        try fileManager.removeItem(at: hooksURL)
+      }
+      return inspect()
+    }
     guard fileManager.fileExists(atPath: hooksURL.path) else {
       try? fileManager.removeItem(at: receiptURL)
       return inspect()
@@ -331,7 +360,7 @@ actor HookInstaller {
     formatter.locale = Locale(identifier: "en_US_POSIX")
     formatter.dateFormat = "yyyyMMdd-HHmmss-SSS"
     let backup = hooksURL.deletingLastPathComponent().appendingPathComponent(
-      "hooks.json.codexdone-backup-\(formatter.string(from: .now))"
+      "\(hooksURL.lastPathComponent).codexdone-backup-\(formatter.string(from: .now))-\(UUID().uuidString.prefix(8))"
     )
     try fileManager.copyItem(at: hooksURL, to: backup)
     try fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: backup.path)
@@ -365,8 +394,8 @@ actor HookInstaller {
 
   private func ownedCommands() -> Set<String> {
     var commands: Set<String> = [
-      shellQuoted(bundledHelperURL.path),
-      shellQuoted(installedHelperURL.path),
+      handlerCommand(for: bundledHelperURL),
+      handlerCommand(for: installedHelperURL),
     ]
     if let data = try? Data(contentsOf: receiptURL),
       let receipt = try? JSONDecoder().decode(Receipt.self, from: data)
@@ -440,6 +469,9 @@ actor HookInstaller {
   }
 
   private func executablePath(from command: String) -> String? {
+    let suffix = source == .codex ? "" : " --source \(source.rawValue)"
+    let command = !suffix.isEmpty && command.hasSuffix(suffix)
+      ? String(command.dropLast(suffix.count)) : command
     guard
       command.hasPrefix("'"),
       command.hasSuffix("'"),
@@ -509,6 +541,41 @@ actor HookInstaller {
       }
     }
     return updatedHooks
+  }
+
+  private func handlerCommand(for url: URL) -> String {
+    shellQuoted(url.path) + (source == .codex ? "" : " --source \(source.rawValue)")
+  }
+
+  private func verifyPiExtensionOwnership() throws {
+    guard fileManager.fileExists(atPath: hooksURL.path) else { return }
+    let contents = try String(contentsOf: hooksURL, encoding: .utf8)
+    guard contents.hasPrefix("// Installed by CodexDone.") else {
+      throw HookInstallerError.incompatibleHookShape
+    }
+  }
+
+  private func piExtensionContents() throws -> String {
+    guard let extensionTemplateURL else { throw HookInstallerError.helperMissing }
+    let template = try String(contentsOf: extensionTemplateURL, encoding: .utf8)
+    let path = String(data: try JSONEncoder().encode(installedHelperURL.path), encoding: .utf8)!
+    return template.replacingOccurrences(of: "__CODEXDONE_HELPER__", with: path)
+  }
+
+  private func inspectPi() -> HookInstallationInspection {
+    let installed = (try? String(contentsOf: hooksURL, encoding: .utf8))
+    let expected = try? piExtensionContents()
+    let executable = fileManager.isExecutableFile(atPath: installedHelperURL.path)
+    let isInstalled = installed?.hasPrefix("// Installed by CodexDone.") == true && executable
+    return HookInstallationInspection(
+      isInstalled: isInstalled,
+      helperIsExecutable: fileManager.isExecutableFile(atPath: bundledHelperURL.path),
+      helperRequiresUpdate: installed != nil && (installed != expected ||
+        !fileManager.contentsEqual(atPath: installedHelperURL.path, andPath: bundledHelperURL.path)),
+      configurationPath: hooksURL.path,
+      configurationModifiedAt: hooksConfigurationModificationDate(),
+      detail: isInstalled ? L10n.text("已安装，在 Pi 中运行 /reload 生效") : L10n.text("尚未安装")
+    )
   }
 
   private func shellQuoted(_ path: String) -> String {

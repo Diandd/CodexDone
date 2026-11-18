@@ -311,3 +311,37 @@
 "请输入有效的正则表达式" = "Enter a valid regular expression";
 "每类最多可添加 %lld 条规则" = "You can add up to %lld rules of each type";
 "屏蔽规则无法保存" = "Blocking rules could not be saved";
+
+"Agent 对话" = "Agent conversation";
+
+"本轮已结束" = "Ready for review";
+
+"Agent 本轮结束时，提醒你回来查看" = "Know when your agent is ready for review";
+
+"Agent 本轮结束后，消息会出现在这里。" = "Finished agent conversations appear here.";
+
+"工具连接" = "Connected agents";
+
+"修复" = "Repair";
+
+"连接" = "Connect";
+
+"打开会话" = "Open conversation";
+
+"在 iTerm2 中打开会话" = "Open session in iTerm2";
+
+"短暂显示刘海未读状态" = "Briefly show unread status at the notch";
+
+"提醒收起后，小标志会在 2 秒后消失；未读消息保留在菜单栏。" = "The compact indicator disappears after 2 seconds. Unread messages stay in the menu bar.";
+
+"已安装，重新启动会话后生效" = "Installed. Restart your session to activate.";
+
+"已安装，在 Pi 中运行 /reload 生效" = "Installed. Run /reload in Pi to activate.";
+
+"未找到对应的 iTerm2 会话，窗口可能已关闭。" = "The iTerm2 session was not found. Its window may have been closed.";
+
+"请在系统设置 → 隐私与安全性 → 自动化中允许 CodexDone 控制 iTerm2。" = "Allow CodexDone to control iTerm2 in System Settings → Privacy & Security → Automation.";
+
+"可以返回会话查看本轮结果" = "Return to your conversation to review the result.";
+
+"现有配置不是有效的 JSON 对象，无法合并。" = "The existing configuration is not a valid JSON object and cannot be merged.";

@@ -18,7 +18,16 @@ struct SettingsRootView: View {
   var body: some View {
     NavigationSplitView {
       List(SettingsSection.allCases, selection: $selection) { section in
-        Label(section.title, systemImage: section.symbol)
+        Label {
+          Text(section.title)
+            .font(.system(size: 13, weight: .medium))
+            .lineLimit(2)
+        } icon: {
+          Image(systemName: section.symbol)
+            .font(.system(size: 14))
+            .frame(width: 24, height: 28)
+        }
+        .padding(.vertical, 3)
           .tag(section)
           .accessibilityIdentifier("settings-section-\(section.rawValue)")
       }
@@ -326,7 +335,7 @@ private struct GeneralSettingsView: View {
   var body: some View {
     Form {
       Section {
-        LabeledContent("Hooks") {
+        LabeledContent("Codex") {
           Label(
             environment.hookConnectionStatusTitle,
             systemImage: environment.hookConnectionSymbolName
@@ -351,13 +360,16 @@ private struct GeneralSettingsView: View {
           }
           .accessibilityIdentifier("settings-hook-enablement-guide")
         }
+        ForEach([AgentSource.claude, .pi]) { source in
+          connectionRow(source)
+        }
         if let message = environment.hookOperationMessage {
           Text(message)
             .font(.footnote)
             .foregroundStyle(.secondary)
         }
       } header: {
-        Text("Codex 连接")
+        Text("工具连接")
           .accessibilityIdentifier("settings-general-section-title")
       }
 
@@ -386,7 +398,10 @@ private struct GeneralSettingsView: View {
         )
       }
 
-      Section("菜单栏") {
+      Section {
+        Text("提醒收起后，小标志会在 2 秒后消失；未读消息保留在菜单栏。")
+          .font(.caption)
+          .foregroundStyle(.secondary)
         Toggle(
           "显示未读数量",
           isOn: Binding(
@@ -396,13 +411,15 @@ private struct GeneralSettingsView: View {
         )
         .accessibilityIdentifier("settings-status-item-count")
         Toggle(
-          "显示刘海未读状态",
+          "短暂显示刘海未读状态",
           isOn: Binding(
             get: { environment.notchUnreadIndicatorEnabled },
             set: { environment.setNotchUnreadIndicatorEnabled($0) }
           )
         )
         .accessibilityIdentifier("settings-notch-unread-indicator")
+      } header: {
+        Text("菜单栏")
       }
 
       Section("应用") {
@@ -465,6 +482,35 @@ private struct GeneralSettingsView: View {
     .sheet(isPresented: $showEnablementGuide) {
       HookEnablementGuideView()
     }
+  }
+
+  private func connectionRow(_ source: AgentSource) -> some View {
+    let inspection = environment.additionalHookInspections[source]
+    return HStack(spacing: 10) {
+      Image(systemName: source.symbol)
+        .foregroundStyle(.secondary)
+        .frame(width: 22)
+      VStack(alignment: .leading, spacing: 3) {
+        Text(source.title).fontWeight(.medium)
+        Text(inspection?.detail ?? L10n.text("尚未安装"))
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
+      Spacer()
+      Button(inspection?.isInstalled == true ? L10n.text("修复") : L10n.text("连接")) {
+        Task { await environment.updateHooks(for: source, install: true) }
+      }
+      .accessibilityIdentifier("settings-connect-\(source.rawValue)")
+      if inspection?.isInstalled == true {
+        Button("移除") {
+          Task { await environment.updateHooks(for: source, install: false) }
+        }
+        .buttonStyle(.borderless)
+        .accessibilityIdentifier("settings-disconnect-\(source.rawValue)")
+      }
+    }
+    .disabled(environment.isHookOperationInProgress)
+    .padding(.vertical, 3)
   }
 
   private var hookStatusColor: Color {

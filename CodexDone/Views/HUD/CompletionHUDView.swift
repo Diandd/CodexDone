@@ -18,7 +18,7 @@ struct CompletionHUDView: View {
           .font(.headline)
           .lineLimit(1)
 
-        Text(alert.conversationTitle ?? L10n.text("Codex 对话"))
+        Text(alert.conversationTitle ?? L10n.text("Agent 对话"))
           .font(.callout)
           .fontWeight(.medium)
           .lineLimit(1)

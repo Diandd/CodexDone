@@ -5,6 +5,44 @@ import Testing
 @testable import CodexDone
 
 struct HookInstallerTests {
+  @Test("Claude 安装幂等，保留用户配置，卸载只移除自己的命令")
+  func claudeInstallationPreservesSettings() async throws {
+    let root = try makeRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let settings = root.appendingPathComponent("settings.json")
+    let original = #"{"model":"keep-model","hooks":{"Stop":[{"hooks":[{"type":"command","command":"other-hook"}]}]}}"#
+    try original.write(to: settings, atomically: true, encoding: .utf8)
+    let installer = HookInstaller(source: .claude, hooksURL: settings,
+      helperURL: try makeHealthyHelper(in: root), receiptURL: root.appendingPathComponent("receipt.json"))
+    #expect(try await installer.install().isInstalled)
+    #expect(try await installer.install().isInstalled)
+    let installed = try String(contentsOf: settings, encoding: .utf8)
+    #expect(installed.components(separatedBy: "--source claude").count == 3)
+    #expect(installed.contains("other-hook"))
+    #expect(try await !installer.uninstall().isInstalled)
+    let restored = try JSONSerialization.jsonObject(with: Data(contentsOf: settings)) as! NSDictionary
+    let expected = try JSONSerialization.jsonObject(with: Data(original.utf8)) as! NSDictionary
+    #expect(restored == expected)
+  }
+
+  @Test("Pi 扩展安装、更新检查与移除不影响其他扩展")
+  func piExtensionInstallation() async throws {
+    let root = try makeRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let template = root.appendingPathComponent("template.ts")
+    try "// Installed by CodexDone.\nconst helper = __CODEXDONE_HELPER__;".write(to: template, atomically: true, encoding: .utf8)
+    let extensionURL = root.appendingPathComponent("extensions/codexdone.ts")
+    let installer = HookInstaller(source: .pi, hooksURL: extensionURL,
+      helperURL: try makeHealthyHelper(in: root), receiptURL: root.appendingPathComponent("receipt.json"),
+      extensionTemplateURL: template)
+    #expect(try await installer.install().isInstalled)
+    #expect(await !installer.inspect().helperRequiresUpdate)
+    let other = extensionURL.deletingLastPathComponent().appendingPathComponent("other.ts")
+    try "// keep".write(to: other, atomically: true, encoding: .utf8)
+    #expect(try await !installer.uninstall().isInstalled)
+    #expect(FileManager.default.fileExists(atPath: other.path))
+  }
+
   @Test("旧 Helper 会在已完成首次引导后重新打开更新引导")
   func outdatedHelperReopensInitializationGuide() {
     let updateContext = InitializationGuidePresentationPolicy.launchContext(

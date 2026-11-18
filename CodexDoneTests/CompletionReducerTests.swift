@@ -6,6 +6,24 @@ import Testing
 struct CompletionReducerTests {
   private let date = Date(timeIntervalSince1970: 1_787_760_000)
 
+  @Test("终端会话标识随完成消息持久化且旧事件可读取")
+  func terminalIdentitySurvivesCompletion() throws {
+    let terminal = "12345678-1234-1234-1234-123456789ABC"
+    var prompt = makeEvent(.userPromptSubmit, turnID: "turn-1")
+    prompt.terminalSessionID = terminal
+    let running = CompletionReducer.reduce(session: nil, event: prompt).0
+    let stop = makeEvent(.stop, turnID: "turn-1")
+    let pending = CompletionReducer.reduce(session: running, event: stop).0
+    let result = try #require(CompletionReducer.finalize(session: pending, eventID: stop.eventID,
+      completedAt: .now, suppressAlert: false))
+    let restored = try JSONDecoder().decode(ConversationCompletionRecord.self,
+      from: JSONEncoder().encode(result.1))
+    #expect(restored.terminalSessionID == terminal)
+    let oldEvent = try JSONDecoder().decode(DesktopCompletionHookEvent.self,
+      from: JSONEncoder().encode(stop))
+    #expect(oldEvent.terminalSessionID == nil)
+  }
+
   @Test("UserPromptSubmit 进入 running")
   func promptStartsRunning() {
     let event = makeEvent(

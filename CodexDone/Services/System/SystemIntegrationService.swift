@@ -23,6 +23,8 @@ enum LaunchAtLoginState: Equatable {
 enum CodexApplicationOpenFailure: Equatable, Sendable {
   case applicationNotFound
   case launchFailed
+  case terminalSessionNotFound
+  case terminalAutomationDenied
 
   var userMessage: String {
     switch self {
@@ -30,6 +32,10 @@ enum CodexApplicationOpenFailure: Equatable, Sendable {
       L10n.text("未找到 Codex.app。")
     case .launchFailed:
       L10n.text("Codex.app 无法打开。")
+    case .terminalSessionNotFound:
+      L10n.text("未找到对应的 iTerm2 会话，窗口可能已关闭。")
+    case .terminalAutomationDenied:
+      L10n.text("请在系统设置 → 隐私与安全性 → 自动化中允许 CodexDone 控制 iTerm2。")
     }
   }
 }
@@ -163,6 +169,55 @@ final class SystemIntegrationService {
       }
     }
     return true
+  }
+
+  func openTerminalSession(_ sessionID: String) async {
+    guard let script = Self.terminalActivationScript(sessionID: sessionID) else { return }
+    let result: CodexApplicationOpenFailure? = await Task.detached {
+      let process = Process()
+      process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+      process.arguments = ["-e", script]
+      let output = Pipe()
+      let errors = Pipe()
+      process.standardOutput = output
+      process.standardError = errors
+      do {
+        try process.run()
+        process.waitUntilExit()
+        let error = String(decoding: errors.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        if error.contains("-1743") { return .terminalAutomationDenied }
+        let response = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        return process.terminationStatus == 0 && response.trimmingCharacters(in: .whitespacesAndNewlines) == "found"
+          ? nil : .terminalSessionNotFound
+      } catch {
+        return .terminalSessionNotFound
+      }
+    }.value
+    lastCodexOpenFailure = result
+  }
+
+  nonisolated static func terminalActivationScript(sessionID: String) -> String? {
+    guard let id = HookPayloadSanitizer.normalizedTerminalSessionID(sessionID) else { return nil }
+    return """
+    with timeout of 10 seconds
+      tell application id "com.googlecode.iterm2"
+        repeat with terminalWindow in windows
+          repeat with terminalTab in tabs of terminalWindow
+            repeat with terminalSession in sessions of terminalTab
+              if unique ID of terminalSession is "\(id)" then
+                select terminalSession
+                select terminalTab
+                select terminalWindow
+                activate
+                return "found"
+              end if
+            end repeat
+          end repeat
+        end repeat
+      end tell
+    end timeout
+    return "missing"
+    """
   }
 
   static func resolveCodexApplicationURL(

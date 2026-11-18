@@ -437,8 +437,8 @@ struct CompletionPersistenceTests {
       playSound: false
     )
 
-    #expect(content.title == L10n.text("Codex 本轮已停止"))
-    #expect(content.body == L10n.text("可以返回 Codex 查看本轮结果"))
+    #expect(content.title == L10n.text("本轮已结束"))
+    #expect(content.body == L10n.text("可以返回会话查看本轮结果"))
     #expect(!content.body.contains("SecretProject"))
     #expect(content.sound == nil)
     #expect(content.userInfo["alertID"] as? String == "record-private")
@@ -450,7 +450,7 @@ struct CompletionPersistenceTests {
       playSound: false
     )
     #expect(customized.title == "提醒我回来 查看")
-    #expect(customized.body == L10n.text("可以返回 Codex 查看本轮结果"))
+    #expect(customized.body == L10n.text("可以返回会话查看本轮结果"))
   }
 
   @Test("前台通知保留声音选项以便在应用声音失败时兜底")

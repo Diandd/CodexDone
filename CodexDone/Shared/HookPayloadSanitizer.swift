@@ -16,6 +16,8 @@ enum HookPayloadSanitizer {
 
   static func event(
     from data: Data,
+    source: AgentSource = .codex,
+    terminalSessionID: String? = nil,
     suppressionRules: AlertSuppressionRules = AlertSuppressionRules(),
     receivedAt: Date = .now
   ) throws -> DesktopCompletionHookEvent {
@@ -36,12 +38,13 @@ enum HookPayloadSanitizer {
       throw HookPayloadSanitizationError.unsupportedEvent
     }
     guard
-      let sessionID = boundedString(dictionary["session_id"], maximumLength: 512),
-      !sessionID.isEmpty
+      let rawSessionID = boundedString(dictionary["session_id"], maximumLength: 512),
+      !rawSessionID.isEmpty
     else {
       throw HookPayloadSanitizationError.missingSessionID
     }
 
+    let sessionID = source.scopedSessionID(rawSessionID)
     let turnID = boundedString(dictionary["turn_id"], maximumLength: 512)
     let workingDirectory = boundedString(dictionary["cwd"], maximumLength: 4_096)
     let rawPrompt = dictionary["prompt"] as? String
@@ -79,8 +82,15 @@ enum HookPayloadSanitizer {
       conversationTitle: conversationTitle,
       replyPreview: replyPreview,
       suppressedByRule: suppressedByRule,
-      receivedAt: receivedAt
+      receivedAt: receivedAt,
+      terminalSessionID: normalizedTerminalSessionID(terminalSessionID)
     )
+  }
+
+  static func normalizedTerminalSessionID(_ value: String?) -> String? {
+    guard let value, let id = value.split(separator: ":").last,
+      UUID(uuidString: String(id)) != nil else { return nil }
+    return String(id).uppercased()
   }
 
   private static func conversationTitle(from raw: String?) -> String? {
