@@ -24,6 +24,19 @@ struct CompletionReducerTests {
     #expect(oldEvent.terminalSessionID == nil)
   }
 
+  @Test("会话转到桌面后清除上一轮终端标识")
+  func desktopPromptClearsPreviousTerminalIdentity() {
+    var prompt = makeEvent(.userPromptSubmit, turnID: "terminal-turn")
+    prompt.terminalSessionID = "12345678-1234-1234-1234-123456789ABC"
+    let terminal = CompletionReducer.reduce(session: nil, event: prompt).0
+    let desktop = CompletionReducer.reduce(session: terminal,
+      event: makeEvent(.userPromptSubmit, turnID: "desktop-turn")).0
+    #expect(desktop.terminalSessionID == nil)
+    let stopped = CompletionReducer.reduce(session: desktop,
+      event: makeEvent(.stop, turnID: "desktop-turn")).0
+    #expect(stopped.terminalSessionID == nil)
+  }
+
   @Test("UserPromptSubmit 进入 running")
   func promptStartsRunning() {
     let event = makeEvent(

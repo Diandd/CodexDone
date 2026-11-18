@@ -34,6 +34,7 @@ enum CompletionReducer {
       session.conversationTitle = event.conversationTitle
       session.replyPreview = nil
       session.suppressesCurrentTurn = event.suppressedByRule
+      session.terminalSessionID = event.terminalSessionID
 
     case .stop:
       guard

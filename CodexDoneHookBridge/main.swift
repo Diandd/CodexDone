@@ -203,12 +203,26 @@ private let parsedEventName: String? = {
 }()
 private let rawEventName = parsedEventName ?? boundedInput.scannedEventName
 
+private let terminalSessionID: String? = {
+  guard let value = ProcessInfo.processInfo.environment["ITERM_SESSION_ID"] else { return nil }
+  // Desktop daemons can inherit a stale terminal ID; detached hooks may still have a CLI parent.
+  var processID = getpid()
+  while processID > 1 {
+    var info = proc_bsdinfo()
+    let size = Int32(MemoryLayout<proc_bsdinfo>.size)
+    guard proc_pidinfo(processID, PROC_PIDTBSDINFO, 0, &info, size) == size else { return nil }
+    if info.pbi_flags & UInt32(PROC_FLAG_CTTY) != 0 { return value }
+    processID = pid_t(info.pbi_ppid)
+  }
+  return nil
+}()
+
 if
   !boundedInput.exceededMaximumSize,
   let event = try? HookPayloadSanitizer.event(
     from: boundedInput.retainedData,
     source: source,
-    terminalSessionID: ProcessInfo.processInfo.environment["ITERM_SESSION_ID"],
+    terminalSessionID: terminalSessionID,
     suppressionRules: AlertSuppressionRulesFile.load()
   )
 {

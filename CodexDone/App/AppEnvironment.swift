@@ -808,8 +808,10 @@ final class AppEnvironment {
   }
 
   private func terminalSessionID(for sessionID: String) -> String? {
-    completionStore.sessions[sessionID]?.terminalSessionID
-      ?? completionStore.records.first(where: { $0.sessionID == sessionID })?.terminalSessionID
+    if let session = completionStore.sessions[sessionID] {
+      return session.terminalSessionID
+    }
+    return completionStore.records.first(where: { $0.sessionID == sessionID })?.terminalSessionID
   }
 
   func importCustomSound(from url: URL) {

@@ -6,6 +6,31 @@ import Testing
 
 @Suite(.serialized)
 struct HookBridgeProcessTests: Sendable {
+  @Test("后台进程继承的终端环境变量不会被当作跳转目标")
+  func ignoresInheritedTerminalIdentityWithoutTerminal() throws {
+    try checkTerminalIdentity(throughTerminal: false)
+  }
+
+  @Test("终端任务通过管道发送 Hook 时保留终端标识")
+  func preservesTerminalIdentityWithPipedInput() throws {
+    try checkTerminalIdentity(throughTerminal: true)
+  }
+
+  private func checkTerminalIdentity(throughTerminal: Bool) throws {
+    let root = try makeTemporaryRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let spool = root.appendingPathComponent("spool")
+    let terminalID = "12345678-1234-1234-1234-123456789ABC"
+    _ = try run(helper: helperURL(), root: root, spool: spool,
+      terminalSessionID: "w0t1p0:" + terminalID, throughTerminal: throughTerminal,
+      input: Data(#"{"hook_event_name":"UserPromptSubmit","session_id":"terminal-test","turn_id":"t1"}"#.utf8))
+    let file = try #require(try jsonFiles(in: spool).first)
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .millisecondsSince1970
+    let event = try decoder.decode(DesktopCompletionHookEvent.self, from: Data(contentsOf: file))
+    #expect(event.terminalSessionID == (throughTerminal ? terminalID : nil))
+  }
+
   @Test("Bridge 的 stdout 和 Spool 只包含有界派生内容")
   func bridgeProcessContract() throws {
     let root = try makeTemporaryRoot()
@@ -438,6 +463,8 @@ struct HookBridgeProcessTests: Sendable {
     suppressionRulesURL: URL? = nil,
     legacyWakeExecutable: URL? = nil,
     legacyWakeMarker: URL? = nil,
+    terminalSessionID: String? = nil,
+    throughTerminal: Bool = false,
     input: Data
   ) throws -> String {
     let process = Process()
@@ -446,6 +473,7 @@ struct HookBridgeProcessTests: Sendable {
     var environment = ProcessInfo.processInfo.environment
     environment.removeValue(forKey: "CODEXDONE_BRIDGE_WAKE_EXECUTABLE")
     environment.removeValue(forKey: "CODEXDONE_BRIDGE_WAKE_MARKER")
+    environment["ITERM_SESSION_ID"] = terminalSessionID
     environment["CODEXDONE_BRIDGE_SOCKET_PATH"] = (
       socketURL ?? root.appendingPathComponent("missing.sock")
     ).path
@@ -464,8 +492,18 @@ struct HookBridgeProcessTests: Sendable {
     process.standardInput = inputPipe
     process.standardOutput = outputPipe
     process.standardError = FileHandle.nullDevice
+    if throughTerminal {
+      let inputURL = root.appendingPathComponent("terminal-input.json")
+      try input.write(to: inputURL)
+      process.executableURL = URL(fileURLWithPath: "/usr/bin/script")
+      process.arguments = ["-q", "/dev/null", "/bin/sh", "-c", "/bin/cat \"$1\" | \"$0\"",
+        helper.path, inputURL.path]
+      process.standardInput = FileHandle.nullDevice
+    }
     try process.run()
-    try inputPipe.fileHandleForWriting.write(contentsOf: input)
+    if !throughTerminal {
+      try inputPipe.fileHandleForWriting.write(contentsOf: input)
+    }
     try inputPipe.fileHandleForWriting.close()
     process.waitUntilExit()
     #expect(process.terminationStatus == 0)
