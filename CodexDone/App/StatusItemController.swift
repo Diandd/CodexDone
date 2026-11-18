@@ -174,6 +174,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
   private let idleTimeProvider: () -> TimeInterval
   private var expandedStatusItemTitle: String?
   private var smartActivityRefreshTask: Task<Void, Never>?
+  private var outsideClickMonitor: Any?
   private var renderedIconState: RenderedIconState?
 
   init(
@@ -207,7 +208,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     guard let button = statusItem.button else { return }
     button.target = self
     button.action = #selector(togglePopover(_:))
-    button.sendAction(on: [.leftMouseUp])
+    button.sendAction(on: [.leftMouseUp, .rightMouseUp])
     button.imagePosition = .imageLeading
     button.imageScaling = .scaleProportionallyDown
     button.setAccessibilityIdentifier("menu-bar-status-item")
@@ -323,7 +324,30 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
   }
 
   @objc private func togglePopover(_ sender: NSStatusBarButton) {
+    if let event = NSApp.currentEvent,
+      event.type == .rightMouseUp || event.modifierFlags.contains(.control)
+    {
+      popover.performClose(nil)
+      let menu = NSMenu()
+      let settings = menu.addItem(withTitle: L10n.text("设置"),
+        action: #selector(openSettingsFromMenu), keyEquivalent: ",")
+      settings.target = self
+      menu.addItem(.separator())
+      let quit = menu.addItem(withTitle: L10n.text("退出 CodexDone"),
+        action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+      quit.target = NSApp
+      NSMenu.popUpContextMenu(menu, with: event, for: sender)
+      return
+    }
     popover.isShown ? popover.performClose(sender) : showPopover()
+  }
+
+  @objc private func openSettingsFromMenu() {
+    NSApp.activate()
+    // Use the Settings command installed by the SwiftUI Settings scene.
+    guard let menu = NSApp.mainMenu?.items.first?.submenu,
+      let index = menu.items.firstIndex(where: { $0.keyEquivalent == "," }) else { return }
+    menu.performActionForItem(at: index)
   }
 
   private func openCodexFromPopover() {
@@ -343,12 +367,21 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     button.window?.contentView?.layoutSubtreeIfNeeded()
     refreshPopoverSize()
     applyPopoverAppearance()
+    NSApp.activate()
     popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+    outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) {
+      [weak self] _ in
+      MainActor.assumeIsolated { self?.popover.performClose(nil) }
+    }
     button.state = .on
     refreshPresentation()
   }
 
   func popoverDidClose(_ notification: Notification) {
+    if let outsideClickMonitor {
+      NSEvent.removeMonitor(outsideClickMonitor)
+      self.outsideClickMonitor = nil
+    }
     statusItem.button?.state = .off
     expandedStatusItemTitle = nil
     refreshPresentation()

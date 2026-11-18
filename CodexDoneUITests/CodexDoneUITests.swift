@@ -78,6 +78,52 @@ final class CodexDoneUITests: XCTestCase {
     XCTAssertEqual(statusItem.frame.width, closedWidth, accuracy: 1)
   }
 
+  func testMenuBarPopoverClosesAfterClickingAnotherApplication() throws {
+    let app = localizedApplication()
+    app.launchArguments += ["--ui-test"]
+    app.launch()
+    addTeardownBlock { app.terminate() }
+
+    let finder = XCUIApplication(bundleIdentifier: "com.apple.finder")
+    finder.activate()
+    let statusItem = app.descendants(matching: .any)["menu-bar-status-item"]
+    XCTAssertTrue(statusItem.waitForExistence(timeout: 5))
+    statusItem.click()
+    let popover = app.descendants(matching: .any)["menu-popover-root"]
+    XCTAssertTrue(popover.waitForExistence(timeout: 5))
+
+    let screen = try XCTUnwrap(NSScreen.main).frame.size
+    statusItem.coordinate(withNormalizedOffset: .zero)
+      .withOffset(CGVector(dx: screen.width / 2 - statusItem.frame.minX,
+        dy: screen.height / 2 - statusItem.frame.minY)).click()
+    XCTAssertTrue(popover.waitForNonExistence(timeout: 5))
+  }
+
+  func testStatusItemContextMenuOpensSettingsAndQuits() throws {
+    let app = localizedApplication()
+    app.launchArguments += ["--ui-test"]
+    app.launch()
+    addTeardownBlock { app.terminate() }
+
+    let statusItem = app.descendants(matching: .any)["menu-bar-status-item"]
+    XCTAssertTrue(statusItem.waitForExistence(timeout: 5))
+    statusItem.rightClick()
+    let settings = app.menuItems["设置"]
+    XCTAssertTrue(settings.waitForExistence(timeout: 5))
+    XCTAssertTrue(app.menuItems["退出 CodexDone"].exists)
+    XCTAssertFalse(app.descendants(matching: .any)["menu-popover-root"].exists)
+    settings.click()
+    XCTAssertTrue(app.descendants(matching: .any)["settings-root"].waitForExistence(timeout: 5))
+
+    statusItem.click()
+    XCTAssertTrue(app.descendants(matching: .any)["menu-popover-root"].waitForExistence(timeout: 5))
+    statusItem.rightClick()
+    let quit = app.menuItems["退出 CodexDone"]
+    XCTAssertTrue(quit.waitForExistence(timeout: 5))
+    quit.click()
+    XCTAssertTrue(app.wait(for: .notRunning, timeout: 5))
+  }
+
   func testStatusItemUnreadCountCanBeHiddenFromSettings() throws {
     let app = localizedApplication()
     app.launchArguments += [
