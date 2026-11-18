@@ -428,7 +428,7 @@ final class CodexDoneUITests: XCTestCase {
     XCTAssertTrue(guideButton.waitForExistence(timeout: 5))
     guideButton.click()
 
-    let guide = app.descendants(matching: .any)["hook-enablement-guide"]
+    let guide = app.sheets.firstMatch
     XCTAssertTrue(guide.waitForExistence(timeout: 5))
     XCTAssertTrue(guide.staticTexts["启用 Hook"].exists)
     XCTAssertTrue(guide.staticTexts["在 Codex 中信任并启用两条 Hook"].exists)
@@ -468,9 +468,7 @@ final class CodexDoneUITests: XCTestCase {
     XCTAssertLessThanOrEqual(abs(leadingInset - trailingInset), 2)
     XCTAssertLessThanOrEqual(doneButton.frame.maxY, guide.frame.maxY + 1)
 
-    let guideWindow = app.windows.containing(.any, identifier: "hook-enablement-guide").firstMatch
-    XCTAssertTrue(guideWindow.exists)
-    let attachment = XCTAttachment(screenshot: guideWindow.screenshot())
+    let attachment = XCTAttachment(screenshot: guide.screenshot())
     attachment.name = "hook-enablement-guide.png"
     attachment.lifetime = .keepAlways
     add(attachment)
@@ -485,7 +483,7 @@ final class CodexDoneUITests: XCTestCase {
     XCTAssertTrue(primaryCommand.exists)
     XCTAssertFalse(guide.descendants(matching: .any)["hook-guide-cli-command-events"].exists)
 
-    let cliAttachment = XCTAttachment(screenshot: guideWindow.screenshot())
+    let cliAttachment = XCTAttachment(screenshot: guide.screenshot())
     cliAttachment.name = "hook-enablement-guide-cli.png"
     cliAttachment.lifetime = .keepAlways
     add(cliAttachment)

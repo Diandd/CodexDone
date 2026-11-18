@@ -481,6 +481,7 @@ private struct GeneralSettingsView: View {
     }
     .sheet(isPresented: $showEnablementGuide) {
       HookEnablementGuideView()
+        .applicationLocalized(using: environment.localization)
     }
   }
 
