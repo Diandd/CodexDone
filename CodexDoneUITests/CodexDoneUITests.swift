@@ -127,7 +127,8 @@ final class CodexDoneUITests: XCTestCase {
   func testNotchClickShowsFailureAndKeepsConversationsUnread() throws {
     let app = localizedApplication()
     app.launchArguments += ["--ui-test", "--ui-test-show-notch",
-      "--ui-test-multiple-records", "--ui-test-fail-session-open"]
+      "--ui-test-multiple-records", "--ui-test-notification-without-target",
+      "--ui-test-alcove-running"]
     app.launch()
     addTeardownBlock { app.terminate() }
 
@@ -1065,8 +1066,7 @@ final class CodexDoneUITests: XCTestCase {
       XCTAssertTrue(app.staticTexts["CodexDone"].exists)
     } else {
       let openCodex = app.descendants(matching: .any)["completion-notch-open-codex"]
-      XCTAssertTrue(openCodex.waitForExistence(timeout: 5))
-      XCTAssertTrue(openCodex.isHittable)
+      XCTAssertFalse(openCodex.exists)
       XCTAssertTrue(
         app.descendants(matching: .any)["completion-notch-conversation-title"].exists
       )

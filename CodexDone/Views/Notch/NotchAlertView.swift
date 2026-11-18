@@ -39,6 +39,7 @@ struct NotchAlertLayout: Equatable, Sendable {
   static let preferredCompactWingWidth: CGFloat = 32
   static let floatingCompactWidth: CGFloat = 112
   static let floatingCompactHeight: CGFloat = 32
+  static let alcoveTopClearance: CGFloat = 160
 
   let panelFrame: NSRect
   let expandedWidth: CGFloat
@@ -74,9 +75,10 @@ struct NotchAlertLayout: Equatable, Sendable {
     visibleFrame: NSRect,
     safeAreaTop: CGFloat,
     auxiliaryTopLeftArea: NSRect?,
-    auxiliaryTopRightArea: NSRect?
+    auxiliaryTopRightArea: NSRect?,
+    coexistsWithAlcove: Bool = false
   ) -> Self {
-    let isAttached = safeAreaTop > 0
+    let isAttached = safeAreaTop > 0 && !coexistsWithAlcove
     let availableWidth = max(
       220,
       min(screenFrame.width, visibleFrame.width) - horizontalShadowInset * 2 - 24
@@ -110,7 +112,10 @@ struct NotchAlertLayout: Equatable, Sendable {
       : floatingCompactHeight
     let contentTopInset = isAttached ? 0 : floatingTopInset
     let panelWidth = expandedWidth + horizontalShadowInset * 2
-    let topEdge = isAttached ? screenFrame.maxY : visibleFrame.maxY
+    // shortcut: reserve space for Alcove's compact alerts; its expanded panels are not tracked.
+    let topEdge = coexistsWithAlcove
+      ? min(visibleFrame.maxY, screenFrame.maxY - alcoveTopClearance)
+      : (isAttached ? screenFrame.maxY : visibleFrame.maxY)
     let panelFrame = NSRect(
       x: screenFrame.midX - panelWidth / 2,
       y: topEdge - panelHeight,
@@ -131,12 +136,21 @@ struct NotchAlertLayout: Equatable, Sendable {
 
   @MainActor
   init(screen: NSScreen) {
+    var coexistsWithAlcove = !NSRunningApplication.runningApplications(
+      withBundleIdentifier: "com.henrikruscon.Alcove"
+    ).isEmpty
+    #if DEBUG
+      if ProcessInfo.processInfo.arguments.contains("--ui-test-alcove-running") {
+        coexistsWithAlcove = true
+      }
+    #endif
     self = Self.make(
       screenFrame: screen.frame,
       visibleFrame: screen.visibleFrame,
       safeAreaTop: screen.safeAreaInsets.top,
       auxiliaryTopLeftArea: screen.auxiliaryTopLeftArea,
-      auxiliaryTopRightArea: screen.auxiliaryTopRightArea
+      auxiliaryTopRightArea: screen.auxiliaryTopRightArea,
+      coexistsWithAlcove: coexistsWithAlcove
     )
   }
 

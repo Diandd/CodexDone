@@ -750,6 +750,19 @@ final class AppEnvironment {
     sequence: Int = 1,
     visualModeOverride: AlertVisualMode? = nil
   ) async {
+    #if DEBUG
+      if isUITest,
+        ProcessInfo.processInfo.arguments.contains("--ui-test-notification-without-target"),
+        let record = completionStore.unreadRecords.first
+      {
+        await alertCoordinator.deliver(
+          AlertPresentation(completion: record),
+          visualModeOverride: visualModeOverride,
+          unreadCount: completionStore.unreadCount
+        )
+        return
+      }
+    #endif
     let alert = AlertPresentation(
       id: "test-\(UUID().uuidString.lowercased())",
       situation: .completion,
@@ -792,12 +805,6 @@ final class AppEnvironment {
 
   @discardableResult
   private func returnToCodex(sessionID: String?) async -> Bool {
-    #if DEBUG
-      if isUITest && ProcessInfo.processInfo.arguments.contains("--ui-test-fail-session-open") {
-        systemIntegrationService.reportMissingConversationWindow()
-        return false
-      }
-    #endif
     if let sessionID, let terminalID = terminalSessionID(for: sessionID) {
       return await systemIntegrationService.openTerminalSession(terminalID)
     }
@@ -981,6 +988,7 @@ final class AppEnvironment {
       capturesReturnTarget
       ? returnTarget(for: event, maximumAge: 3)
       : nil
+    let event = await systemIntegrationService.captureTerminalSession(for: event, target: target)
     let didPersist = await completionStore.handlePersisting(
       event,
       deliveryMode: deliveryMode,
@@ -996,6 +1004,7 @@ final class AppEnvironment {
   private func consumeSocketEvent(_ event: DesktopCompletionHookEvent) async -> Bool {
     AppLog.hooks.notice("A live Desktop hook event was received")
     let target = returnTarget(for: event)
+    let event = await systemIntegrationService.captureTerminalSession(for: event, target: target)
     let didPersist = await completionStore.handlePersisting(
       event,
       deliveryMode: .live,

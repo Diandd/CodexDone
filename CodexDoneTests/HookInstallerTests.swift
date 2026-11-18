@@ -517,7 +517,7 @@ struct SystemIntegrationServiceTests {
   }
 
   @Test @MainActor
-  func cliSourceDoesNotOfferReturnWhileDesktopAndLegacyFallbackRemainAvailable() {
+  func onlyKnownDesktopTargetsOfferDesktopReturn() async {
     let cliTarget = CodexReturnTarget(
       processIdentifier: 200,
       bundleIdentifier: "com.apple.Terminal"
@@ -535,7 +535,10 @@ struct SystemIntegrationServiceTests {
     )
     #expect(!SystemIntegrationService.canReturnToCodex(cliTarget))
     #expect(SystemIntegrationService.canReturnToCodex(desktopTarget))
-    #expect(SystemIntegrationService.canReturnToCodex(nil))
+    #expect(!SystemIntegrationService.canReturnToCodex(nil))
+    let service = SystemIntegrationService()
+    #expect(await !service.returnToCodex(nil))
+    #expect(service.lastCodexOpenFailure == .conversationWindowUnavailable)
   }
 
   @Test @MainActor

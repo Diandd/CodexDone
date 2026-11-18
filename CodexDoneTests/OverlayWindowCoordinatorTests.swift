@@ -310,6 +310,30 @@ final class OverlayWindowCoordinatorTests: XCTestCase {
     XCTAssertLessThan(interactionPanel.frame.height, panel.frame.height)
   }
 
+  func testAlcoveCoexistenceMovesCardAndClickTargetBelowTheNotch() {
+    for screenFrame in [NSRect(x: 0, y: 0, width: 1512, height: 982),
+      NSRect(x: -1920, y: 982, width: 1920, height: 1080)]
+    {
+      let layout = NotchAlertLayout.make(
+        screenFrame: screenFrame,
+        visibleFrame: screenFrame.insetBy(dx: 0, dy: 38),
+        safeAreaTop: 38,
+        auxiliaryTopLeftArea: nil,
+        auxiliaryTopRightArea: nil,
+        coexistsWithAlcove: true
+      )
+      XCTAssertFalse(layout.isAttachedToCameraHousing)
+      XCTAssertEqual(layout.cameraHousingWidth, 0)
+      XCTAssertEqual(layout.compactWidth, NotchAlertLayout.floatingCompactWidth)
+      for expanded in [true, false] {
+        let hitArea = layout.interactionFrame(isExpanded: expanded)
+        XCTAssertEqual(hitArea.midX, screenFrame.midX)
+        XCTAssertEqual(hitArea.maxY, layout.panelFrame.maxY - layout.contentTopInset)
+        XCTAssertLessThan(hitArea.maxY, screenFrame.maxY - NotchAlertLayout.alcoveTopClearance)
+      }
+    }
+  }
+
   func testUnreadNotchDisappearsAndDoesNotReturnOnSynchronization() async throws {
     let screen = try XCTUnwrap(NSScreen.main)
     let coordinator = NotchWindowCoordinator(screensProvider: { [screen] },

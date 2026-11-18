@@ -71,9 +71,11 @@ In **Settings → General → Connected agents**, connect each tool you use:
 - **Claude Code:** connect to merge those events into `~/.claude/settings.json`, preserving existing settings and hooks. Restart the Claude Code session.
 - **Pi Agent:** connect to install `~/.pi/agent/extensions/codexdone.ts`, then run `/reload`. The extension alerts on `agent_settled`, after automatic retries and queued work finish.
 
-Click a completed message to select its original **iTerm2 window, tab, and split pane**. This uses `ITERM_SESSION_ID` inherited by the local agent process. Allow CodexDone to control iTerm2 when macOS asks. Existing records without a terminal ID cannot locate a terminal session; new turns capture it automatically. SSH and tmux pane routing are not included.
+Click a completed message to select its original **iTerm2 window, tab, and split pane**. This uses `ITERM_SESSION_ID` inherited by the local agent process. For Codex CLI using a shared background server, CodexDone captures the active iTerm2 pane when you submit a prompt with iTerm2 in front. Allow CodexDone to control iTerm2 when macOS asks. Existing records without a terminal ID cannot locate a terminal session; start a new turn after updating. Missing targets show an error instead of opening the desktop app. SSH and tmux pane routing are not included.
 
 The notch alert collapses after six seconds, then its compact indicator disappears after two seconds. Unread messages remain in the menu bar.
+
+When **Alcove** is running, CodexDone automatically uses a floating card below the top 160 points of the screen. The entire card remains clickable. This is a coexistence mode, not an Alcove plugin; manually expanded Alcove panels are not tracked.
 
 Integration references: [Claude Code hooks](https://code.claude.com/docs/en/hooks), [Pi extensions](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/extensions.md), [iTerm2 scripting](https://iterm2.com/documentation-scripting.html).
 

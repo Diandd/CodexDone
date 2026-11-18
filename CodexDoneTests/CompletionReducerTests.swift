@@ -6,11 +6,14 @@ import Testing
 struct CompletionReducerTests {
   private let date = Date(timeIntervalSince1970: 1_787_760_000)
 
-  @Test("终端会话标识随完成消息持久化且旧事件可读取")
-  func terminalIdentitySurvivesCompletion() throws {
+  @Test("共享后台的终端会话在提交时捕获并随完成消息持久化") @MainActor
+  func terminalIdentitySurvivesCompletion() async throws {
     let terminal = "12345678-1234-1234-1234-123456789ABC"
-    var prompt = makeEvent(.userPromptSubmit, turnID: "turn-1")
-    prompt.terminalSessionID = terminal
+    let prompt = await SystemIntegrationService().captureTerminalSession(
+      for: makeEvent(.userPromptSubmit, turnID: "turn-1"),
+      target: CodexReturnTarget(processIdentifier: 200, bundleIdentifier: "com.googlecode.iterm2"),
+      readSessionID: { "w0t1p0:" + terminal }
+    )
     let running = CompletionReducer.reduce(session: nil, event: prompt).0
     let stop = makeEvent(.stop, turnID: "turn-1")
     let pending = CompletionReducer.reduce(session: running, event: stop).0
@@ -22,6 +25,31 @@ struct CompletionReducerTests {
     let oldEvent = try JSONDecoder().decode(DesktopCompletionHookEvent.self,
       from: JSONEncoder().encode(stop))
     #expect(oldEvent.terminalSessionID == nil)
+  }
+
+  @Test("只在缺少终端标识的 iTerm2 提交事件中读取当前标签页") @MainActor
+  func terminalCaptureDoesNotGuessAtCompletionOrReplaceAnExplicitTarget() async {
+    let service = SystemIntegrationService()
+    let iterm = CodexReturnTarget(processIdentifier: 200, bundleIdentifier: "com.googlecode.iterm2")
+    let desktop = CodexReturnTarget(processIdentifier: 201, bundleIdentifier: "com.openai.codex")
+    let prompt = makeEvent(.userPromptSubmit, turnID: "turn-1")
+    var explicit = prompt
+    explicit.terminalSessionID = "12345678-1234-1234-1234-123456789ABC"
+    let cases: [(DesktopCompletionHookEvent, CodexReturnTarget?)] = [
+      (prompt, nil), (prompt, desktop), (explicit, iterm),
+      (makeEvent(.stop, turnID: "turn-1"), iterm),
+    ]
+    var readCount = 0
+    for (event, target) in cases {
+      let captured = await service.captureTerminalSession(for: event, target: target) {
+        readCount += 1
+        return "ABCDEFAB-1234-1234-1234-123456789ABC"
+      }
+      #expect(captured == event)
+    }
+    #expect(readCount == 0)
+    let denied = await service.captureTerminalSession(for: prompt, target: iterm) { nil }
+    #expect(denied == prompt)
   }
 
   @Test("会话转到桌面后清除上一轮终端标识")

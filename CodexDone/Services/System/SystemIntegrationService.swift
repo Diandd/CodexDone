@@ -20,7 +20,7 @@ enum LaunchAtLoginState: Equatable {
   }
 }
 
-enum CodexApplicationOpenFailure: Equatable, Sendable {
+enum CodexApplicationOpenFailure: Error, Equatable, Sendable {
   case applicationNotFound
   case launchFailed
   case terminalSessionNotFound
@@ -133,9 +133,7 @@ final class SystemIntegrationService {
 
   @discardableResult
   func returnToCodex(_ target: CodexReturnTarget?) async -> Bool {
-    guard let target else { return await openCodexApplication() }
-
-    guard Self.canReturnToCodex(target) else {
+    guard let target, Self.canReturnToCodex(target) else {
       reportMissingConversationWindow()
       return false
     }
@@ -178,13 +176,53 @@ final class SystemIntegrationService {
     lastCodexOpenFailure = .conversationWindowUnavailable
   }
 
+  func captureTerminalSession(
+    for event: DesktopCompletionHookEvent,
+    target: CodexReturnTarget?,
+    readSessionID: () async -> String? = SystemIntegrationService.currentTerminalSessionID
+  ) async -> DesktopCompletionHookEvent {
+    guard event.eventName == .userPromptSubmit,
+      event.terminalSessionID == nil,
+      target?.bundleIdentifier == "com.googlecode.iterm2"
+    else { return event }
+    var captured = event
+    captured.terminalSessionID = HookPayloadSanitizer.normalizedTerminalSessionID(await readSessionID())
+    return captured
+  }
+
+  private static func currentTerminalSessionID() async -> String? {
+    let result = await terminalScriptOutput("""
+      with timeout of 2 seconds
+        tell application id "com.googlecode.iterm2"
+          return unique ID of current session of current window
+        end tell
+      end timeout
+      """)
+    return try? result.get()
+  }
+
   @discardableResult
   func openTerminalSession(_ sessionID: String) async -> Bool {
     guard let script = Self.terminalActivationScript(sessionID: sessionID) else {
       reportMissingConversationWindow()
       return false
     }
-    let result: CodexApplicationOpenFailure? = await Task.detached {
+    switch await Self.terminalScriptOutput(script) {
+    case .success("found"):
+      lastCodexOpenFailure = nil
+      return true
+    case .success:
+      lastCodexOpenFailure = .terminalSessionNotFound
+    case .failure(let failure):
+      lastCodexOpenFailure = failure
+    }
+    return false
+  }
+
+  private static func terminalScriptOutput(
+    _ script: String
+  ) async -> Result<String, CodexApplicationOpenFailure> {
+    await Task.detached {
       let process = Process()
       process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
       process.arguments = ["-e", script]
@@ -196,16 +234,15 @@ final class SystemIntegrationService {
         try process.run()
         process.waitUntilExit()
         let error = String(decoding: errors.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
-        if error.contains("-1743") { return .terminalAutomationDenied }
+        if error.contains("-1743") { return .failure(.terminalAutomationDenied) }
         let response = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
-        return process.terminationStatus == 0 && response.trimmingCharacters(in: .whitespacesAndNewlines) == "found"
-          ? nil : .terminalSessionNotFound
+        return process.terminationStatus == 0
+          ? .success(response.trimmingCharacters(in: .whitespacesAndNewlines))
+          : .failure(.terminalSessionNotFound)
       } catch {
-        return .terminalSessionNotFound
+        return .failure(.terminalSessionNotFound)
       }
     }.value
-    lastCodexOpenFailure = result
-    return result == nil
   }
 
   nonisolated static func terminalActivationScript(sessionID: String) -> String? {
@@ -283,7 +320,7 @@ final class SystemIntegrationService {
   }
 
   static func canReturnToCodex(_ target: CodexReturnTarget?) -> Bool {
-    guard let target else { return true }
+    guard let target else { return false }
     return returnRoute(for: target) == .desktop
   }
 
