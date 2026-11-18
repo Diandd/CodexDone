@@ -908,10 +908,10 @@ final class CodexDoneUITests: XCTestCase {
     overlay.click()
     XCTAssertTrue(overlay.waitForNonExistence(timeout: 2))
     hudTest.click()
-    XCTAssertTrue(
-      app.descendants(matching: .any)["completion-hud"].waitForExistence(timeout: 5)
-    )
-    XCTAssertTrue(app.staticTexts["系统声音已播放"].waitForExistence(timeout: 5))
+    let hud = app.descendants(matching: .any)["completion-hud"]
+    XCTAssertTrue(hud.waitForExistence(timeout: 5))
+    XCTAssertTrue(hud.waitForNonExistence(timeout: 8))
+    XCTAssertTrue(alertSettings.staticTexts["系统声音已播放"].waitForExistence(timeout: 5))
 
     alertSettings.scroll(byDeltaX: 0, deltaY: 2_000)
     let attachment = XCTAttachment(screenshot: alertSettings.screenshot())
