@@ -114,7 +114,7 @@ final class CodexDoneUITests: XCTestCase {
     XCTAssertTrue(popover.waitForExistence(timeout: 5))
     XCTAssertTrue(app.staticTexts["1 to review"].exists)
     XCTAssertTrue(app.buttons["Settings"].exists)
-    XCTAssertTrue(app.buttons["Open Codex"].exists)
+    XCTAssertTrue(app.buttons["Open conversation"].exists)
     let returnToCodex = app.buttons["menu-open-codex"]
     XCTAssertTrue(returnToCodex.isHittable)
     XCTAssertLessThanOrEqual(returnToCodex.frame.maxX, popover.frame.maxX)
@@ -124,7 +124,7 @@ final class CodexDoneUITests: XCTestCase {
     XCTAssertTrue(settingsWindow.waitForExistence(timeout: 5))
     let nativeWindow = app.windows.containing(.any, identifier: "settings-root").firstMatch
     XCTAssertEqual(nativeWindow.title, "General")
-    XCTAssertTrue(app.staticTexts["Codex Connection"].exists)
+    XCTAssertTrue(app.staticTexts["Connected agents"].exists)
     XCTAssertTrue(app.staticTexts["Alerts"].exists)
     XCTAssertTrue(app.staticTexts["App"].exists)
     XCTAssertTrue(app.descendants(matching: .any)["settings-language"].exists)

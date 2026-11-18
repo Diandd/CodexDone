@@ -192,7 +192,11 @@ then
   stop_ui_test_processes
 fi
 if [[ "$ui_test_status" -ne 0 ]]; then
-  remove_result "$UI_RESULT"
+  xcrun xcresulttool get test-results summary --path "$UI_RESULT" || true
+  xcrun xcresulttool export attachments \
+    --path "$UI_RESULT" \
+    --output-path "$ROOT_DIR/artifacts/build/ui-failures" \
+    --only-failures || true
   exit "$ui_test_status"
 fi
 

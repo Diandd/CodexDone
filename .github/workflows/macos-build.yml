@@ -62,3 +62,11 @@ jobs:
             artifacts/build/*.xcresult
             artifacts/ui-tests/
           retention-days: 7
+
+      - name: Upload failure screenshots
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ui-failures
+          path: artifacts/build/ui-failures/
+          retention-days: 7
