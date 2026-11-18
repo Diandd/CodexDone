@@ -35,8 +35,8 @@ final class CodexDoneUITests: XCTestCase {
     XCTAssertGreaterThan(healthWarning.frame.minX, title.frame.maxX)
     XCTAssertEqual(healthWarning.frame.midY, title.frame.midY, accuracy: 5)
     let openCodex = app.buttons["menu-open-codex"]
-    XCTAssertTrue(openCodex.exists)
-    XCTAssertLessThan(visualModeMenu.frame.maxX, openCodex.frame.minX)
+    XCTAssertFalse(openCodex.exists)
+    XCTAssertLessThanOrEqual(visualModeMenu.frame.maxX, popover.frame.maxX)
     let conversation = app.buttons["menu-open-session-ui-test-record-codexdone"]
     XCTAssertTrue(conversation.label.contains("优化 CodexDone 菜单信息层级"))
     XCTAssertTrue(app.staticTexts["CodexDone"].exists)
@@ -178,10 +178,8 @@ final class CodexDoneUITests: XCTestCase {
     XCTAssertTrue(popover.waitForExistence(timeout: 5))
     XCTAssertTrue(app.staticTexts["1 to review"].exists)
     XCTAssertTrue(app.buttons["Settings"].exists)
-    XCTAssertTrue(app.buttons["Open conversation"].exists)
-    let returnToCodex = app.buttons["menu-open-codex"]
-    XCTAssertTrue(returnToCodex.isHittable)
-    XCTAssertLessThanOrEqual(returnToCodex.frame.maxX, popover.frame.maxX)
+    XCTAssertFalse(app.buttons["Open conversation"].exists)
+    XCTAssertFalse(app.buttons["menu-open-codex"].exists)
 
     app.buttons["Settings"].click()
     let settingsWindow = app.descendants(matching: .any)["settings-root"]
