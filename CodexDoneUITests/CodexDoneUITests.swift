@@ -178,7 +178,7 @@ final class CodexDoneUITests: XCTestCase {
     XCTAssertTrue(popover.waitForExistence(timeout: 5))
     XCTAssertTrue(app.staticTexts["1 to review"].exists)
     XCTAssertTrue(app.buttons["Settings"].exists)
-    XCTAssertFalse(app.buttons["Open conversation"].exists)
+    XCTAssertTrue(app.buttons["Open conversation"].exists)
     XCTAssertFalse(app.buttons["menu-open-codex"].exists)
 
     app.buttons["Settings"].click()
