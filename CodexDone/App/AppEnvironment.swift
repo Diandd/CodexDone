@@ -72,20 +72,16 @@ enum HUDAlertClickAction {
 @MainActor
 enum NotchAlertClickAction {
   static func perform(
-    requestedSessionID: String?,
-    latestUnreadSessionID: String?,
-    acknowledgesAll: Bool,
-    opensCodex: Bool,
-    acknowledgeAll: () -> Void,
-    returnToCodex: (String?) -> Void
-  ) {
-    let returnSessionID = requestedSessionID ?? latestUnreadSessionID
-    if acknowledgesAll {
-      acknowledgeAll()
+    sessionID: String?,
+    unreadRecordID: String?,
+    openSession: (String?) async -> Bool,
+    acknowledgeRecord: (String) -> Void
+  ) async -> Bool {
+    guard await openSession(sessionID) else { return false }
+    if let unreadRecordID {
+      acknowledgeRecord(unreadRecordID)
     }
-    if opensCodex {
-      returnToCodex(returnSessionID)
-    }
+    return true
   }
 }
 
@@ -418,24 +414,32 @@ final class AppEnvironment {
             sessionID: sessionID,
             unreadRecordID: unreadRecordID,
             acknowledgeRecord: { self.completionStore.acknowledge(recordID: $0) },
-            returnToCodex: { self.returnToCodex(sessionID: $0) }
+            returnToCodex: { sessionID in
+              Task { await self.returnToCodex(sessionID: sessionID) }
+            }
           )
         } else {
           self.openCodex()
         }
       },
-      notch: { [weak self] requestedSessionID, acknowledgesAll in
+      notch: { [weak self] requestedSessionID, _ in
         guard let self else { return }
         let latestUnreadSessionID = self.completionStore.unreadRecords.first?.sessionID
         let returnSessionID = requestedSessionID ?? latestUnreadSessionID
-        NotchAlertClickAction.perform(
-          requestedSessionID: requestedSessionID,
-          latestUnreadSessionID: latestUnreadSessionID,
-          acknowledgesAll: acknowledgesAll,
-          opensCodex: self.canOpenCodex(sessionID: returnSessionID),
-          acknowledgeAll: { self.completionStore.acknowledgeAll() },
-          returnToCodex: { self.returnToCodex(sessionID: $0) }
-        )
+        let record = self.completionStore.unreadRecords.first { $0.sessionID == returnSessionID }
+        Task {
+          let opened = await NotchAlertClickAction.perform(
+            sessionID: returnSessionID,
+            unreadRecordID: record?.id,
+            openSession: { await self.returnToCodex(sessionID: $0) },
+            acknowledgeRecord: { self.completionStore.acknowledge(recordID: $0) }
+          )
+          if !opened, let failure = self.systemIntegrationService.lastCodexOpenFailure {
+            self.alertCoordinator.showNotchOpenFailure(
+              sessionID: returnSessionID, message: failure.userMessage
+            )
+          }
+        }
       },
       canOpenCodex: { [weak self] sessionID in
         self?.canOpenCodex(sessionID: sessionID) ?? false
@@ -769,7 +773,7 @@ final class AppEnvironment {
       sessionID = completionStore.unreadRecords.first?.sessionID
     }
     guard canOpenCodex(sessionID: sessionID) else { return }
-    returnToCodex(sessionID: sessionID)
+    Task { await returnToCodex(sessionID: sessionID) }
   }
 
   func blockSimilarSubmittedMessages(for record: ConversationCompletionRecord) {
@@ -786,15 +790,23 @@ final class AppEnvironment {
     completionStore.acknowledge(recordID: record.id)
   }
 
-  private func returnToCodex(sessionID: String?) {
+  @discardableResult
+  private func returnToCodex(sessionID: String?) async -> Bool {
+    #if DEBUG
+      if isUITest && ProcessInfo.processInfo.arguments.contains("--ui-test-fail-session-open") {
+        systemIntegrationService.reportMissingConversationWindow()
+        return false
+      }
+    #endif
     if let sessionID, let terminalID = terminalSessionID(for: sessionID) {
-      Task { await systemIntegrationService.openTerminalSession(terminalID) }
-      return
+      return await systemIntegrationService.openTerminalSession(terminalID)
     }
-    if let sessionID, AgentSource.forSession(sessionID) != .codex { return }
+    if let sessionID, AgentSource.forSession(sessionID) != .codex {
+      systemIntegrationService.reportMissingConversationWindow()
+      return false
+    }
     let target = sessionID.flatMap { codexReturnTargets[$0] }
-    guard SystemIntegrationService.canReturnToCodex(target) else { return }
-    _ = systemIntegrationService.returnToCodex(target)
+    return await systemIntegrationService.returnToCodex(target)
   }
 
   private func canOpenCodex(sessionID: String?) -> Bool {

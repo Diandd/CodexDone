@@ -334,6 +334,27 @@ final class OverlayWindowCoordinatorTests: XCTestCase {
     XCTAssertNil(SystemIntegrationService.terminalActivationScript(sessionID: "invalid"))
   }
 
+  func testCompactNotchKeepsOriginalSessionAndExpandsOnOpenFailure() async throws {
+    let screen = try XCTUnwrap(NSScreen.main)
+    let coordinator = NotchWindowCoordinator(screensProvider: { [screen] },
+      expandedDuration: .milliseconds(40), compactDuration: .seconds(2))
+    defer { coordinator.dismissAll() }
+    var requestedSessionID: String?
+    coordinator.setOpenCodexAction { sessionID, _ in requestedSessionID = sessionID }
+    coordinator.show(Self.alert(sessionID: "compact-route"), headline: "Ready",
+      displayStrategy: .primary, unreadCount: 2)
+    try await Task.sleep(for: .milliseconds(150))
+    let view = try XCTUnwrap(NSApp.windows.compactMap { $0.contentView as? NotchInteractionView }
+      .first { $0.sessionID == "compact-route" })
+    XCTAssertLessThan(view.frame.height, NotchAlertLayout.expandedHeight)
+    XCTAssertTrue(view.accessibilityPerformPress())
+    XCTAssertEqual(requestedSessionID, "compact-route")
+
+    coordinator.showOpenFailure(sessionID: "compact-route", message: "Window closed")
+    XCTAssertEqual(view.frame.height, NotchAlertLayout.expandedHeight)
+    XCTAssertEqual(coordinator.retainedUnreadCount, 2)
+  }
+
   func testNotchDismissalWaitsForExpandedCollapseBeforeFading() {
     XCTAssertEqual(
       NotchWindowCoordinator.dismissalFadeDelay(hasExpandedState: true),
@@ -351,12 +372,12 @@ final class OverlayWindowCoordinatorTests: XCTestCase {
     var hoverStates: [Bool] = []
     let view = NotchInteractionView(
       sessionID: "session-a",
-      acknowledgesAll: true,
+      hasUnreadRecords: true,
       onHoverChanged: { hoverStates.append($0) }
-    ) { sessionID, acknowledgesAll in
+    ) { sessionID, hasUnreadRecords in
       requestCount += 1
       requestedSessionID = sessionID
-      XCTAssertTrue(acknowledgesAll)
+      XCTAssertTrue(hasUnreadRecords)
     }
     view.frame = NSRect(x: 0, y: 0, width: 240, height: 80)
     view.updateTrackingAreas()
@@ -371,7 +392,7 @@ final class OverlayWindowCoordinatorTests: XCTestCase {
     XCTAssertEqual(view.accessibilityIdentifier(), "completion-notch-open-codex")
     XCTAssertEqual(
       view.accessibilityLabel(),
-      L10n.text("全部已查看并打开 Codex")
+      L10n.text("打开会话")
     )
     XCTAssertTrue(view.accessibilityPerformPress())
     XCTAssertEqual(requestCount, 1)
@@ -397,11 +418,11 @@ final class OverlayWindowCoordinatorTests: XCTestCase {
     view.opensCodex = false
     XCTAssertTrue(view.isInteractionEnabled)
     XCTAssertTrue(view.acceptsFirstMouse(for: nil))
-    XCTAssertEqual(view.accessibilityLabel(), L10n.text("全部已查看"))
+    XCTAssertEqual(view.accessibilityLabel(), L10n.text("打开会话"))
     XCTAssertTrue(view.accessibilityPerformPress())
     XCTAssertEqual(requestCount, 3)
 
-    view.acknowledgesAll = false
+    view.hasUnreadRecords = false
     XCTAssertFalse(view.isInteractionEnabled)
     XCTAssertFalse(view.acceptsFirstMouse(for: nil))
     XCTAssertFalse(view.accessibilityPerformPress())
@@ -482,8 +503,8 @@ final class OverlayWindowCoordinatorTests: XCTestCase {
     var actions: [String] = []
     coordinator.setVisualAlertOpenCodexActions(
       hud: { sessionID in actions.append("hud:\(sessionID ?? "nil")") },
-      notch: { sessionID, acknowledgesAll in
-        actions.append("notch:\(sessionID ?? "nil"):\(acknowledgesAll)")
+      notch: { sessionID, hasUnreadRecords in
+        actions.append("notch:\(sessionID ?? "nil"):\(hasUnreadRecords)")
       },
       canOpenCodex: { _ in true }
     )
@@ -520,68 +541,54 @@ final class OverlayWindowCoordinatorTests: XCTestCase {
     XCTAssertEqual(operations, ["return:test-alert"])
   }
 
-  func testNotchClickAcknowledgesAllBeforeReturningToCapturedSession() {
+  func testNotchClickAcknowledgesOnlyItsRecordAfterSuccessfulReturn() async {
     var operations: [String] = []
-    var returnedSessionID: String?
-
-    NotchAlertClickAction.perform(
-      requestedSessionID: nil,
-      latestUnreadSessionID: "session-latest",
-      acknowledgesAll: true,
-      opensCodex: true,
-      acknowledgeAll: { operations.append("acknowledge-all") },
-      returnToCodex: { sessionID in
-        operations.append("return")
-        returnedSessionID = sessionID
-      }
+    let opened = await NotchAlertClickAction.perform(
+      sessionID: "session-expanded",
+      unreadRecordID: "record-expanded",
+      openSession: { sessionID in
+        operations.append("open:\(sessionID ?? "nil")")
+        return true
+      },
+      acknowledgeRecord: { operations.append("acknowledge:\($0)") }
     )
+    XCTAssertTrue(opened)
+    XCTAssertEqual(operations, ["open:session-expanded", "acknowledge:record-expanded"])
+  }
 
-    XCTAssertEqual(operations, ["acknowledge-all", "return"])
-    XCTAssertEqual(returnedSessionID, "session-latest")
-
-    NotchAlertClickAction.perform(
-      requestedSessionID: "session-expanded",
-      latestUnreadSessionID: "session-latest",
-      acknowledgesAll: true,
-      opensCodex: true,
-      acknowledgeAll: {},
-      returnToCodex: { returnedSessionID = $0 }
+  func testFailedNotchReturnKeepsRecordUnread() async {
+    var acknowledgedRecords: [String] = []
+    let opened = await NotchAlertClickAction.perform(
+      sessionID: "session-closed",
+      unreadRecordID: "record-closed",
+      openSession: { _ in false },
+      acknowledgeRecord: { acknowledgedRecords.append($0) }
     )
-    XCTAssertEqual(returnedSessionID, "session-expanded")
+    XCTAssertFalse(opened)
+    XCTAssertTrue(acknowledgedRecords.isEmpty)
+  }
 
-    operations.removeAll()
-    returnedSessionID = nil
-    NotchAlertClickAction.perform(
-      requestedSessionID: "session-cli",
-      latestUnreadSessionID: "session-latest",
-      acknowledgesAll: true,
-      opensCodex: false,
-      acknowledgeAll: { operations.append("acknowledge-all") },
-      returnToCodex: { sessionID in
-        operations.append("return")
-        returnedSessionID = sessionID
-      }
+  func testNotchPreviewDoesNotAcknowledgeUnrelatedRecords() async {
+    var openedSessionID: String?
+    var acknowledgedRecords: [String] = []
+    _ = await NotchAlertClickAction.perform(
+      sessionID: "test-alert",
+      unreadRecordID: nil,
+      openSession: {
+        openedSessionID = $0
+        return true
+      },
+      acknowledgeRecord: { acknowledgedRecords.append($0) }
     )
-    XCTAssertEqual(operations, ["acknowledge-all"])
-    XCTAssertNil(returnedSessionID)
-
-    operations.removeAll()
-    NotchAlertClickAction.perform(
-      requestedSessionID: "test-alert",
-      latestUnreadSessionID: "session-latest",
-      acknowledgesAll: false,
-      opensCodex: true,
-      acknowledgeAll: { operations.append("acknowledge-all") },
-      returnToCodex: { _ in operations.append("return") }
-    )
-    XCTAssertEqual(operations, ["return"])
+    XCTAssertEqual(openedSessionID, "test-alert")
+    XCTAssertTrue(acknowledgedRecords.isEmpty)
   }
 
   func testNotchCoordinatorForwardsExpandedAndCompactOpenRequests() {
     let coordinator = NotchWindowCoordinator(screensProvider: { [] })
-    var requests: [(sessionID: String?, acknowledgesAll: Bool)] = []
-    coordinator.setOpenCodexAction { sessionID, acknowledgesAll in
-      requests.append((sessionID, acknowledgesAll))
+    var requests: [(sessionID: String?, hasUnreadRecords: Bool)] = []
+    coordinator.setOpenCodexAction { sessionID, hasUnreadRecords in
+      requests.append((sessionID, hasUnreadRecords))
     }
 
     coordinator.requestOpenCodex(sessionID: "session-a")
@@ -589,9 +596,9 @@ final class OverlayWindowCoordinatorTests: XCTestCase {
 
     XCTAssertEqual(requests.count, 2)
     XCTAssertEqual(requests[0].sessionID, "session-a")
-    XCTAssertTrue(requests[0].acknowledgesAll)
+    XCTAssertTrue(requests[0].hasUnreadRecords)
     XCTAssertNil(requests[1].sessionID)
-    XCTAssertTrue(requests[1].acknowledgesAll)
+    XCTAssertTrue(requests[1].hasUnreadRecords)
   }
 
   func testNotchUnreadIndicatorTracksOnlyRetainedSessionsUntilAcknowledged() {

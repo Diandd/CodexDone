@@ -327,6 +327,8 @@
 "连接" = "Connect";
 
 "打开会话" = "Open conversation";
+"无法打开会话" = "Could not open conversation";
+"未记录可打开的窗口，请先连接对应工具后开始新对话" = "No window was recorded. Connect the agent in Settings, then start a new conversation";
 
 "在 iTerm2 中打开会话" = "Open session in iTerm2";
 

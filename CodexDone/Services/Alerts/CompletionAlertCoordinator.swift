@@ -376,6 +376,10 @@ final class CompletionAlertCoordinator {
     notchCoordinator.setOpenCodexAvailability(canOpenCodex)
   }
 
+  func showNotchOpenFailure(sessionID: String?, message: String) {
+    notchCoordinator.showOpenFailure(sessionID: sessionID, message: message)
+  }
+
   static func notificationShouldPlaySound(appSoundPlayed: Bool) -> Bool {
     !appSoundPlayed
   }

@@ -25,6 +25,7 @@ enum CodexApplicationOpenFailure: Equatable, Sendable {
   case launchFailed
   case terminalSessionNotFound
   case terminalAutomationDenied
+  case conversationWindowUnavailable
 
   var userMessage: String {
     switch self {
@@ -36,6 +37,8 @@ enum CodexApplicationOpenFailure: Equatable, Sendable {
       L10n.text("未找到对应的 iTerm2 会话，窗口可能已关闭。")
     case .terminalAutomationDenied:
       L10n.text("请在系统设置 → 隐私与安全性 → 自动化中允许 CodexDone 控制 iTerm2。")
+    case .conversationWindowUnavailable:
+      L10n.text("未记录可打开的窗口，请先连接对应工具后开始新对话")
     }
   }
 }
@@ -129,22 +132,22 @@ final class SystemIntegrationService {
   }
 
   @discardableResult
-  func returnToCodex(_ target: CodexReturnTarget?) -> Bool {
-    guard let target else { return openCodexApplication() }
+  func returnToCodex(_ target: CodexReturnTarget?) async -> Bool {
+    guard let target else { return await openCodexApplication() }
 
     guard Self.canReturnToCodex(target) else {
-      lastCodexOpenFailure = nil
+      reportMissingConversationWindow()
       return false
     }
     if activate(target) {
       lastCodexOpenFailure = nil
       return true
     }
-    return openCodexApplication()
+    return await openCodexApplication()
   }
 
   @discardableResult
-  func openCodexApplication() -> Bool {
+  func openCodexApplication() async -> Bool {
     let workspace = NSWorkspace.shared
     let registeredApplicationURL = workspace.urlForApplication(
       withBundleIdentifier: Self.codexBundleIdentifier
@@ -159,20 +162,28 @@ final class SystemIntegrationService {
       lastCodexOpenFailure = .applicationNotFound
       return false
     }
-    lastCodexOpenFailure = nil
-    workspace.openApplication(
-      at: applicationURL,
-      configuration: NSWorkspace.OpenConfiguration()
-    ) { [weak self] application, error in
-      Task { @MainActor [weak self] in
-        self?.lastCodexOpenFailure = application == nil || error != nil ? .launchFailed : nil
+    let opened = await withCheckedContinuation { continuation in
+      workspace.openApplication(
+        at: applicationURL,
+        configuration: NSWorkspace.OpenConfiguration()
+      ) { application, error in
+        continuation.resume(returning: application != nil && error == nil)
       }
     }
-    return true
+    lastCodexOpenFailure = opened ? nil : .launchFailed
+    return opened
   }
 
-  func openTerminalSession(_ sessionID: String) async {
-    guard let script = Self.terminalActivationScript(sessionID: sessionID) else { return }
+  func reportMissingConversationWindow() {
+    lastCodexOpenFailure = .conversationWindowUnavailable
+  }
+
+  @discardableResult
+  func openTerminalSession(_ sessionID: String) async -> Bool {
+    guard let script = Self.terminalActivationScript(sessionID: sessionID) else {
+      reportMissingConversationWindow()
+      return false
+    }
     let result: CodexApplicationOpenFailure? = await Task.detached {
       let process = Process()
       process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
@@ -194,6 +205,7 @@ final class SystemIntegrationService {
       }
     }.value
     lastCodexOpenFailure = result
+    return result == nil
   }
 
   nonisolated static func terminalActivationScript(sessionID: String) -> String? {

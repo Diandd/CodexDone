@@ -160,6 +160,7 @@ final class NotchAlertAnimationState {
   let layout: NotchAlertLayout
   var isExpanded = false
   var isHovered = false
+  var openFailureMessage: String?
   var unreadCount: Int
 
   init(
@@ -181,10 +182,10 @@ final class NotchInteractionView: NSView {
   var opensCodex: Bool {
     didSet { updateInteractionAvailability() }
   }
-  var acknowledgesAll: Bool {
+  var hasUnreadRecords: Bool {
     didSet { updateInteractionAvailability() }
   }
-  var isInteractionEnabled: Bool { opensCodex || acknowledgesAll }
+  var isInteractionEnabled: Bool { opensCodex || hasUnreadRecords }
   private let onOpenCodex: @MainActor (String?, Bool) -> Void
   private let onHoverChanged: @MainActor (Bool) -> Void
   private var hoverTrackingArea: NSTrackingArea?
@@ -193,13 +194,13 @@ final class NotchInteractionView: NSView {
   init(
     sessionID: String?,
     opensCodex: Bool = true,
-    acknowledgesAll: Bool,
+    hasUnreadRecords: Bool,
     onHoverChanged: @escaping @MainActor (Bool) -> Void = { _ in },
     onOpenCodex: @escaping @MainActor (String?, Bool) -> Void
   ) {
     self.sessionID = sessionID
     self.opensCodex = opensCodex
-    self.acknowledgesAll = acknowledgesAll
+    self.hasUnreadRecords = hasUnreadRecords
     self.onHoverChanged = onHoverChanged
     self.onOpenCodex = onOpenCodex
     super.init(frame: .zero)
@@ -248,12 +249,12 @@ final class NotchInteractionView: NSView {
     guard isInteractionEnabled else { return }
     let location = convert(event.locationInWindow, from: nil)
     guard bounds.contains(location) else { return }
-    onOpenCodex(sessionID, acknowledgesAll)
+    onOpenCodex(sessionID, hasUnreadRecords)
   }
 
   override func accessibilityPerformPress() -> Bool {
     guard isInteractionEnabled else { return false }
-    onOpenCodex(sessionID, acknowledgesAll)
+    onOpenCodex(sessionID, hasUnreadRecords)
     return true
   }
 
@@ -272,14 +273,7 @@ final class NotchInteractionView: NSView {
       cancelPointerInteraction()
     }
     setAccessibilityElement(isInteractionEnabled)
-    switch (acknowledgesAll, opensCodex) {
-    case (true, true):
-      setAccessibilityLabel(L10n.text("全部已查看并打开 Codex"))
-    case (true, false):
-      setAccessibilityLabel(L10n.text("全部已查看"))
-    case (false, _):
-      setAccessibilityLabel(L10n.text("打开 Codex"))
-    }
+    setAccessibilityLabel(L10n.text("打开会话"))
   }
 }
 
@@ -398,7 +392,21 @@ struct NotchAlertView: View {
 
   @ViewBuilder
   private var expandedContent: some View {
-    if let alert = animationState.alert {
+    if let message = animationState.openFailureMessage {
+      VStack(alignment: .leading, spacing: 4) {
+        Label("无法打开会话", systemImage: "exclamationmark.triangle")
+          .font(.headline)
+          .foregroundStyle(.orange)
+        Text(message)
+          .font(.caption)
+          .foregroundStyle(.white)
+          .lineLimit(3)
+      }
+      .padding(.horizontal, 22)
+      .padding(.vertical, 11)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .accessibilityIdentifier("completion-notch-open-error")
+    } else if let alert = animationState.alert {
       HStack(alignment: .top, spacing: 12) {
         Image(systemName: alert.situation.systemImage)
           .font(.title3.weight(.semibold))
@@ -472,7 +480,7 @@ final class NotchWindowCoordinator {
   private var autoCollapseTask: Task<Void, Never>?
   private var postCollapseTask: Task<Void, Never>?
   private var presentationGeneration: UUID?
-  private var expandedSessionID: String?
+  private var presentedSessionID: String?
   private var currentUnreadCount = 0
   private var currentDisplayStrategy: AlertDisplayStrategy?
   private var retainsUnreadIndicator = false
@@ -513,8 +521,8 @@ final class NotchWindowCoordinator {
     canOpenCodex = availability
   }
 
-  func requestOpenCodex(sessionID: String?, acknowledgesAll: Bool = true) {
-    onOpenCodex(sessionID, acknowledgesAll)
+  func requestOpenCodex(sessionID: String?, hasUnreadRecords: Bool = true) {
+    onOpenCodex(sessionID, hasUnreadRecords)
   }
 
   func show(
@@ -538,7 +546,7 @@ final class NotchWindowCoordinator {
 
     let generation = UUID()
     presentationGeneration = generation
-    expandedSessionID = alert.sessionID
+    presentedSessionID = alert.sessionID
     currentDisplayStrategy = displayStrategy
     let displayedUnreadCount = max(1, retainedUnreadCount)
     for screen in screens {
@@ -557,15 +565,15 @@ final class NotchWindowCoordinator {
       let interactionView = NotchInteractionView(
         sessionID: alert.sessionID,
         opensCodex: canOpenCodex(alert.sessionID),
-        acknowledgesAll: unreadCount != nil,
+        hasUnreadRecords: unreadCount != nil,
         onHoverChanged: { [weak animationState] isHovered in
           animationState?.isHovered = isHovered
         }
       ) {
-        [weak self] sessionID, acknowledgesAll in
+        [weak self] sessionID, hasUnreadRecords in
         self?.requestOpenCodex(
           sessionID: sessionID,
-          acknowledgesAll: acknowledgesAll
+          hasUnreadRecords: hasUnreadRecords
         )
       }
       let interactionPanel = Self.makeInteractionPanel(
@@ -598,9 +606,13 @@ final class NotchWindowCoordinator {
       self?.updateInteractionSurfaces(
         isExpanded: true,
         sessionID: alert.sessionID,
-        acknowledgesAll: unreadCount != nil
+        hasUnreadRecords: unreadCount != nil
       )
     }
+    scheduleCollapse(generation: generation)
+  }
+
+  private func scheduleCollapse(generation: UUID) {
     let expandedDuration = self.expandedDuration
     autoCollapseTask = Task { @MainActor [weak self] in
       do {
@@ -611,6 +623,21 @@ final class NotchWindowCoordinator {
       guard self?.presentationGeneration == generation else { return }
       self?.collapseAfterDisplay(generation: generation)
     }
+  }
+
+  func showOpenFailure(sessionID: String?, message: String) {
+    guard let generation = presentationGeneration,
+      presentedSessionID == nil || presentedSessionID == sessionID else { return }
+    expansionTask?.cancel()
+    autoCollapseTask?.cancel()
+    postCollapseTask?.cancel()
+    for state in animationStates {
+      state.openFailureMessage = message
+      state.isExpanded = true
+    }
+    updateInteractionSurfaces(isExpanded: true, sessionID: sessionID,
+      hasUnreadRecords: retainedUnreadCount > 0)
+    scheduleCollapse(generation: generation)
   }
 
   func dismiss(
@@ -627,8 +654,8 @@ final class NotchWindowCoordinator {
     for state in animationStates {
       state.unreadCount = retainedUnreadCount
     }
-    if expandedSessionID == sessionID {
-      expandedSessionID = nil
+    if presentedSessionID == sessionID {
+      presentedSessionID = nil
       expansionTask?.cancel()
       if let generation = presentationGeneration {
         scheduleCompactDismissal(generation: generation)
@@ -641,7 +668,7 @@ final class NotchWindowCoordinator {
       updateInteractionSurfaces(
         isExpanded: false,
         sessionID: nil,
-        acknowledgesAll: retainedUnreadCount > 0
+        hasUnreadRecords: retainedUnreadCount > 0
       )
     }
   }
@@ -659,18 +686,18 @@ final class NotchWindowCoordinator {
     }
 
     guard retainedUnreadCount > 0 else {
-      guard expandedSessionID == nil else { return }
+      guard presentedSessionID == nil else { return }
       dismissAll()
       return
     }
 
     if !panels.isEmpty {
-      guard expandedSessionID == nil else { return }
+      guard presentedSessionID == nil else { return }
       if currentDisplayStrategy == displayStrategy {
         updateInteractionSurfaces(
           isExpanded: false,
           sessionID: nil,
-          acknowledgesAll: true
+          hasUnreadRecords: true
         )
         return
       }
@@ -694,7 +721,7 @@ final class NotchWindowCoordinator {
     panels.removeAll()
     animationStates.removeAll()
     presentationGeneration = nil
-    expandedSessionID = nil
+    presentedSessionID = nil
     currentDisplayStrategy = nil
     guard !panelsToDismiss.isEmpty else { return }
 
@@ -747,15 +774,14 @@ final class NotchWindowCoordinator {
   }
 
   private func collapseAfterDisplay(generation: UUID) {
-    expandedSessionID = nil
     for state in animationStates {
       state.unreadCount = max(1, retainedUnreadCount)
       state.isExpanded = false
     }
     updateInteractionSurfaces(
       isExpanded: false,
-      sessionID: nil,
-      acknowledgesAll: retainedUnreadCount > 0
+      sessionID: presentedSessionID,
+      hasUnreadRecords: retainedUnreadCount > 0
     )
     scheduleCompactDismissal(generation: generation)
   }
@@ -780,7 +806,7 @@ final class NotchWindowCoordinator {
     panels.removeAll()
     animationStates.removeAll()
     presentationGeneration = nil
-    expandedSessionID = nil
+    presentedSessionID = nil
     currentDisplayStrategy = nil
     guard !panelsToDismiss.isEmpty else { return }
     fadeOut(panelsToDismiss)
@@ -852,7 +878,7 @@ final class NotchWindowCoordinator {
     animationStates.removeAll()
     fadingPanelGroups.removeAll()
     presentationGeneration = nil
-    expandedSessionID = nil
+    presentedSessionID = nil
     currentDisplayStrategy = nil
   }
 
@@ -870,13 +896,13 @@ final class NotchWindowCoordinator {
   private func updateInteractionSurfaces(
     isExpanded: Bool,
     sessionID: String?,
-    acknowledgesAll: Bool
+    hasUnreadRecords: Bool
   ) {
     for index in interactionPanels.indices {
       guard animationStates.indices.contains(index) else { continue }
       interactionViews[index].sessionID = sessionID
       interactionViews[index].opensCodex = canOpenCodex(sessionID)
-      interactionViews[index].acknowledgesAll = acknowledgesAll
+      interactionViews[index].hasUnreadRecords = hasUnreadRecords
       interactionPanels[index].ignoresMouseEvents =
         !interactionViews[index].isInteractionEnabled
       interactionPanels[index].setFrame(
@@ -913,15 +939,15 @@ final class NotchWindowCoordinator {
       let interactionView = NotchInteractionView(
         sessionID: nil,
         opensCodex: canOpenCodex(nil),
-        acknowledgesAll: true,
+        hasUnreadRecords: true,
         onHoverChanged: { [weak animationState] isHovered in
           animationState?.isHovered = isHovered
         }
       ) {
-        [weak self] sessionID, acknowledgesAll in
+        [weak self] sessionID, hasUnreadRecords in
         self?.requestOpenCodex(
           sessionID: sessionID,
-          acknowledgesAll: acknowledgesAll
+          hasUnreadRecords: hasUnreadRecords
         )
       }
       let interactionPanel = Self.makeInteractionPanel(

@@ -124,6 +124,22 @@ final class CodexDoneUITests: XCTestCase {
     XCTAssertTrue(app.wait(for: .notRunning, timeout: 5))
   }
 
+  func testNotchClickShowsFailureAndKeepsConversationsUnread() throws {
+    let app = localizedApplication()
+    app.launchArguments += ["--ui-test", "--ui-test-show-notch",
+      "--ui-test-multiple-records", "--ui-test-fail-session-open"]
+    app.launch()
+    addTeardownBlock { app.terminate() }
+
+    let notch = app.descendants(matching: .any)["completion-notch-open-codex"]
+    XCTAssertTrue(notch.waitForExistence(timeout: 5))
+    notch.click()
+    XCTAssertTrue(app.staticTexts["无法打开会话"].waitForExistence(timeout: 5))
+    let statusItem = app.descendants(matching: .any)["menu-bar-status-item"]
+    statusItem.click()
+    XCTAssertTrue(app.staticTexts["2 条待查看"].waitForExistence(timeout: 5))
+  }
+
   func testStatusItemUnreadCountCanBeHiddenFromSettings() throws {
     let app = localizedApplication()
     app.launchArguments += [
