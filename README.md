@@ -75,7 +75,7 @@ Click a completed message to select its original **iTerm2 window, tab, and split
 
 The notch alert collapses after six seconds, then its compact indicator disappears after two seconds. Unread messages remain in the menu bar.
 
-When **Alcove** is running, CodexDone automatically uses a floating card below the top 160 points of the screen. The entire card remains clickable. This is a coexistence mode, not an Alcove plugin; manually expanded Alcove panels are not tracked.
+When **Alcove** is running, CodexDone automatically uses a floating card just below the notch or menu bar, with a small gap. The entire card remains clickable. This is a coexistence mode, not an Alcove plugin; manually expanded Alcove panels are not tracked.
 
 Integration references: [Claude Code hooks](https://code.claude.com/docs/en/hooks), [Pi extensions](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/extensions.md), [iTerm2 scripting](https://iterm2.com/documentation-scripting.html).
 

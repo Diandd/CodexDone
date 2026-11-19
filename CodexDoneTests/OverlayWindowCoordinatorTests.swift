@@ -329,7 +329,7 @@ final class OverlayWindowCoordinatorTests: XCTestCase {
         let hitArea = layout.interactionFrame(isExpanded: expanded)
         XCTAssertEqual(hitArea.midX, screenFrame.midX)
         XCTAssertEqual(hitArea.maxY, layout.panelFrame.maxY - layout.contentTopInset)
-        XCTAssertLessThan(hitArea.maxY, screenFrame.maxY - NotchAlertLayout.alcoveTopClearance)
+        XCTAssertEqual(hitArea.maxY, screenFrame.maxY - 38 - NotchAlertLayout.floatingTopInset)
       }
     }
   }

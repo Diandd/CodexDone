@@ -39,7 +39,6 @@ struct NotchAlertLayout: Equatable, Sendable {
   static let preferredCompactWingWidth: CGFloat = 32
   static let floatingCompactWidth: CGFloat = 112
   static let floatingCompactHeight: CGFloat = 32
-  static let alcoveTopClearance: CGFloat = 160
 
   let panelFrame: NSRect
   let expandedWidth: CGFloat
@@ -114,7 +113,7 @@ struct NotchAlertLayout: Equatable, Sendable {
     let panelWidth = expandedWidth + horizontalShadowInset * 2
     // shortcut: reserve space for Alcove's compact alerts; its expanded panels are not tracked.
     let topEdge = coexistsWithAlcove
-      ? min(visibleFrame.maxY, screenFrame.maxY - alcoveTopClearance)
+      ? min(visibleFrame.maxY, screenFrame.maxY - max(safeAreaTop, floatingCompactHeight))
       : (isAttached ? screenFrame.maxY : visibleFrame.maxY)
     let panelFrame = NSRect(
       x: screenFrame.midX - panelWidth / 2,
