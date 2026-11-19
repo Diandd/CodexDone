@@ -61,6 +61,8 @@ final class SystemIntegrationService {
   private(set) var launchAtLoginState: LaunchAtLoginState
   private(set) var lastCodexOpenFailure: CodexApplicationOpenFailure?
   private let service: SMAppService
+  @ObservationIgnored private var terminalFocusObserver: NSObjectProtocol?
+  @ObservationIgnored private var lastTerminalDeparture: (target: CodexReturnTarget, date: Date)?
 
   init(service: SMAppService = .mainApp) {
     self.service = service
@@ -121,14 +123,59 @@ final class SystemIntegrationService {
   }
 
   func captureCodexReturnTarget() -> CodexReturnTarget? {
-    guard let application = NSWorkspace.shared.frontmostApplication else { return nil }
-    return Self.resolveCodexReturnTarget(
-      processIdentifier: application.processIdentifier,
-      currentProcessIdentifier: ProcessInfo.processInfo.processIdentifier,
-      bundleIdentifier: application.bundleIdentifier,
-      currentBundleIdentifier: Bundle.main.bundleIdentifier,
-      isTerminated: application.isTerminated
+    let foreground = NSWorkspace.shared.frontmostApplication.flatMap { application in
+      Self.resolveCodexReturnTarget(
+        processIdentifier: application.processIdentifier,
+        currentProcessIdentifier: ProcessInfo.processInfo.processIdentifier,
+        bundleIdentifier: application.bundleIdentifier,
+        currentBundleIdentifier: Bundle.main.bundleIdentifier,
+        isTerminated: application.isTerminated
+      )
+    }
+    return Self.promptReturnTarget(
+      foreground: foreground,
+      departedTerminal: lastTerminalDeparture?.target,
+      secondsSinceDeparture: lastTerminalDeparture.map { Date.now.timeIntervalSince($0.date) }
     )
+  }
+
+  func startTrackingTerminalFocus() {
+    guard terminalFocusObserver == nil else { return }
+    terminalFocusObserver = NSWorkspace.shared.notificationCenter.addObserver(
+      forName: NSWorkspace.didDeactivateApplicationNotification, object: nil, queue: .main
+    ) { [weak self] notification in
+      guard let application = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+        application.bundleIdentifier == "com.googlecode.iterm2"
+      else { return }
+      let target = CodexReturnTarget(processIdentifier: application.processIdentifier,
+        bundleIdentifier: application.bundleIdentifier)
+      MainActor.assumeIsolated {
+        self?.lastTerminalDeparture = (target, .now)
+      }
+    }
+  }
+
+  func stopTrackingTerminalFocus() {
+    if let terminalFocusObserver {
+      NSWorkspace.shared.notificationCenter.removeObserver(terminalFocusObserver)
+    }
+    terminalFocusObserver = nil
+    lastTerminalDeparture = nil
+  }
+
+  static func promptReturnTarget(
+    foreground: CodexReturnTarget?,
+    departedTerminal: CodexReturnTarget?,
+    secondsSinceDeparture: TimeInterval?
+  ) -> CodexReturnTarget? {
+    if foreground?.bundleIdentifier == "com.googlecode.iterm2"
+      || foreground?.bundleIdentifier == codexBundleIdentifier
+    { return foreground }
+    // The prompt hook can arrive just after the user switches away from iTerm2.
+    if let departedTerminal, let secondsSinceDeparture,
+      secondsSinceDeparture >= 0, secondsSinceDeparture <= 3
+    { return departedTerminal }
+    return foreground
   }
 
   @discardableResult

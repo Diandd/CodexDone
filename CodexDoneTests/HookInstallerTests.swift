@@ -517,6 +517,21 @@ struct SystemIntegrationServiceTests {
   }
 
   @Test @MainActor
+  func recentTerminalDoesNotOverrideAnAgentWindowOrAnExpiredDeparture() {
+    let terminal = CodexReturnTarget(processIdentifier: 200, bundleIdentifier: "com.googlecode.iterm2")
+    let desktop = CodexReturnTarget(processIdentifier: 201, bundleIdentifier: "com.openai.codex")
+    let browser = CodexReturnTarget(processIdentifier: 202, bundleIdentifier: "com.google.Chrome")
+    for current in [terminal, desktop] {
+      #expect(SystemIntegrationService.promptReturnTarget(foreground: current,
+        departedTerminal: terminal, secondsSinceDeparture: 1) == current)
+    }
+    #expect(SystemIntegrationService.promptReturnTarget(foreground: browser,
+      departedTerminal: terminal, secondsSinceDeparture: 4) == browser)
+    #expect(SystemIntegrationService.promptReturnTarget(foreground: nil,
+      departedTerminal: nil, secondsSinceDeparture: nil) == nil)
+  }
+
+  @Test @MainActor
   func onlyKnownDesktopTargetsOfferDesktopReturn() async {
     let cliTarget = CodexReturnTarget(
       processIdentifier: 200,

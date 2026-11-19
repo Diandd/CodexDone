@@ -599,6 +599,7 @@ final class AppEnvironment {
     #endif
 
     AppLog.lifecycle.notice("CodexDone startup began")
+    systemIntegrationService.startTrackingTerminalFocus()
     await completionStore.load()
     _ = await spoolConsumer.drain { [weak self] event in
       await self?.consumeSpoolEvent(
@@ -630,6 +631,7 @@ final class AppEnvironment {
   func stop() {
     guard didStart else { return }
     didStart = false
+    systemIntegrationService.stopTrackingTerminalFocus()
     spoolPollingTask?.cancel()
     spoolPollingTask = nil
     for task in alertDeliveryTasks.values { task.cancel() }

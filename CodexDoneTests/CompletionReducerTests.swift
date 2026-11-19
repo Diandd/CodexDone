@@ -6,12 +6,17 @@ import Testing
 struct CompletionReducerTests {
   private let date = Date(timeIntervalSince1970: 1_787_760_000)
 
-  @Test("共享后台的终端会话在提交时捕获并随完成消息持久化") @MainActor
+  @Test("提交后切走窗口仍捕获原终端并随完成消息持久化") @MainActor
   func terminalIdentitySurvivesCompletion() async throws {
     let terminal = "12345678-1234-1234-1234-123456789ABC"
+    let target = SystemIntegrationService.promptReturnTarget(
+      foreground: CodexReturnTarget(processIdentifier: 201, bundleIdentifier: "com.apple.finder"),
+      departedTerminal: CodexReturnTarget(processIdentifier: 200, bundleIdentifier: "com.googlecode.iterm2"),
+      secondsSinceDeparture: 1
+    )
     let prompt = await SystemIntegrationService().captureTerminalSession(
       for: makeEvent(.userPromptSubmit, turnID: "turn-1"),
-      target: CodexReturnTarget(processIdentifier: 200, bundleIdentifier: "com.googlecode.iterm2"),
+      target: target,
       readSessionID: { "w0t1p0:" + terminal }
     )
     let running = CompletionReducer.reduce(session: nil, event: prompt).0
